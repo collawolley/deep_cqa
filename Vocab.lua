@@ -7,7 +7,7 @@ token.
 
 --]]
 
-local Vocab = torch.class('emd_lookup.Vocab')
+local Vocab = torch.class('deep_cqa.Vocab')
 
 function Vocab:__init(path)
   self.size = 0

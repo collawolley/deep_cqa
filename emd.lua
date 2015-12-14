@@ -1,4 +1,7 @@
 --[[
 	word vector reading layer
 --]]
-local EMD,parent  = torch.class()
+request('.')
+request('config.lua')
+local EMD,parent  = torch.class('deep_cqa.EMD','nn.Module')
+printf('good')
