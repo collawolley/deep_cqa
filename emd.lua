@@ -1,7 +1,8 @@
 --[[
 	word vector reading layer
 --]]
-request('.')
-request('config.lua')
-local EMD,parent  = torch.class('deep_cqa.EMD','nn.Module')
-printf('good')
+require('.')
+local dict = deep_cqa.Vocab(deep_cqa.config.dict)
+local emb_vec = deep_cqa.config.emd_vec
+local emb_dict = deep_cqa.config.emb_dict
+print(emb_vec)
