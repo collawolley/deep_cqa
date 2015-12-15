@@ -6,7 +6,6 @@ require('optim')
 require('xlua')
 require('sys')
 require('lfs')
-require('config.lua')
 deep_cqa = {}
 -------------------------------
 --项目的目录配置部分
@@ -22,3 +21,4 @@ deep_cqa.config = config
 include('util/vocab.lua')
 include('util/emd.lua')
 include('util/read_data.lua')
+deep_cqa.get_sub_embedding()

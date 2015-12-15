@@ -3,17 +3,18 @@
 --]]
 ----------------------------------------------------------
 function deep_cqa.read_embedding(vocab_path, emb_path)
-  local vocab = deep_cqa.Vocab(vocab_path)
-  local embedding = torch.load(emb_path)
-  return vocab, embedding
+	--从文件读取词向量和字典
+	local vocab = deep_cqa.Vocab(vocab_path)
+	local embedding = torch.load(emb_path)
+	return vocab, embedding
 end
 ------------------------------------------------------------
 function deep_cqa.get_sub_embedding()
-	local dict = deep_cqa.Vocab(deep_cqa.config.dict)
-	local emd_vec = config.emd_vec
-	local emd_dict = config.emd_dict
-	local emd_dim =  config.emd_dim
-	emd_dict,emd_vec = read_embedding(emd_dict,emd_vec)
+	local dict	=	deep_cqa.Vocab(deep_cqa.config.dict)
+	local emd_vec	=	deep_cqa.config.emd_vec
+	local emd_dict	=	deep_cqa.config.emd_dict
+	local emd_dim	=	deep_cqa.config.emd_dim
+	emd_dict,emd_vec	=	deep_cqa.read_embedding(emd_dict,emd_vec)
 	local vecs = torch.Tensor(dict.size,emd_dim)
 	local unseen_count = 0
 	for i =1, dict.size do
@@ -32,4 +33,3 @@ function deep_cqa.get_sub_embedding()
 	return dict,vecs
 end
 -------------------------------------------------------------
-deep_cqa.get_sub_embedding()
