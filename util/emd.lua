@@ -19,7 +19,7 @@ function deep_cqa.get_sub_embedding()
 	local unseen_count = 0
 	for i =1, dict.size do
 	local w =  string.gsub(dict:token(i),'\\','')
-	print(w)
+	--print(w)
 		if emd_dict:contains(w) then
 			vecs[i] = emd_vec[emd_dict:index(w)]
 		else
@@ -27,7 +27,7 @@ function deep_cqa.get_sub_embedding()
 			vecs[i]	= uniform(-0.05,0.05)
 		end
 	end
-	print('unseen words count:',unseen_count)
+	--print('unseen words count:',unseen_count)
 	emd_vec = nil
 	emd_dict = nil
 	return dict,vecs
