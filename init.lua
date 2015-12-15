@@ -1,3 +1,4 @@
+--项目的引用的包
 require('torch')
 require('nn')
 require('nngraph')
@@ -18,6 +19,5 @@ config.dict = 'data/text.dict'
 
 deep_cqa.config = config
 -------------------------------
---include('Vocab.lua')
---include('emd.lua')
-
+include('util/vocab.lua')
+include('util/emd.lua')

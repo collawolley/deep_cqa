@@ -1,8 +1,9 @@
 --[[
 	word vector reading layer
 --]]
+require('..')
 require('.')
-require('Vocab.lua')
+require('vocab.lua')
 ----------------------------------------------------------
 function deep_cqa.read_embedding(vocab_path, emb_path)
   local vocab = deep_cqa.Vocab(vocab_path)
