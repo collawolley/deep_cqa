@@ -70,6 +70,7 @@ function deep_cqa.insurance.load_answer()
 		answer_set[list[1]] = list[2]
 	end
 	deep_cqa.insurance['answer'] = answer_set
+	print(#answer_set)
 	file:close()
 end
 ---------------------------------------
@@ -128,13 +129,42 @@ function deep_cqa.insurance.generate_train_set()
 	local nsize = deep_cqa.config.insurance.negative_size
 	local train = {}
 	local dataset = deep_cqa.insurance
+	local answer_size = deep_cqa.get_size(dataset['answer'])
 	for num,item in pairs(dataset['train']) do
+		print(num)
 		local qst =item[1]
 		for i = 1,#item[2] do
 			local ta = dataset['answer'][item[2][i]]
-			
+			local fa = deep_cqa.insurance.random_negative_id(item[2],answer_size)
+			print('generate',ta,fa)
 		end
 	end
+end
+function deep_cqa.get_size(tab)
+	local count =0
+	for i,v in pairs(tab) do
+		count = count + 1
+	end
+	return count
+end
+function deep_cqa.insurance.random_negative_id(list,size)
+	--随机获取一个answer id，该id不在传入的列表当中
+	math.randomseed(tostring(os.time()):reverse():sub(1, 7))
+	local id =nil
+	while true do
+		local mark = nil
+		id = math.random(1,size)
+--		print('random',id,list,size)
+		for i = 1, #list do
+			if id == list[i] then
+				mark =1
+			end
+		end
+		if mark == nil then
+			break
+		end
+	end
+	return id
 end
 ---------------
 function deep_cqa.insurance.generate_test_set()
