@@ -39,7 +39,7 @@ function deep_cqa.read_one_sentece(sent,vocab)
 end
 ---------------------------------------------------------
 --针对保险数据QA数据集设计的读取函数
-function deep_cqa.insurance.load_train()
+function deep_cqa.ins_meth.load_train()
 	local ip = deep_cqa.config.insurance.train
 	local file = io.open(ip,'r')
 	local line
@@ -56,7 +56,7 @@ function deep_cqa.insurance.load_train()
 	deep_cqa.insurance['train'] = train_set
 end
 -----------------------------------
-function deep_cqa.insurance.load_answer()
+function deep_cqa.ins_meth.load_answer()
 	local ip = deep_cqa.config.insurance.answer
 	local file = io.open(ip,'r')
 	local line
@@ -74,7 +74,7 @@ function deep_cqa.insurance.load_answer()
 	file:close()
 end
 ---------------------------------------
-function deep_cqa.insurance.load_test(name)
+function deep_cqa.ins_meth.load_test(name)
 	local ip = nil
 	if name == 'dev' then
 		ip = deep_cqa.config.insurance.dev
@@ -105,27 +105,27 @@ function deep_cqa.insurance.load_test(name)
 end
 ---------------------------------------
 --载入保险数据的整体执行函数
-function deep_cqa.load_insurance_txt_dataset()
-	deep_cqa.insurance.load_train()
-	deep_cqa.insurance.load_answer()
-	deep_cqa.insurance.load_test('dev')
-	deep_cqa.insurance.load_test('test1')
-	deep_cqa.insurance.load_test('test2')
+function deep_cqa.ins_meth.load_txt_dataset()
+	deep_cqa.ins_meth.load_train()
+	deep_cqa.ins_meth.load_answer()
+	deep_cqa.ins_meth.load_test('dev')
+	deep_cqa.ins_meth.load_test('test1')
+	deep_cqa.ins_meth.load_test('test2')
 end
-function deep_cqa.save_insurance_binary()
+function deep_cqa.ins_meth.save_binary()
 	if deep_cqa.insurance == nil then
 		return nil
 	end
 	local op = deep_cqa.config.insurance.binary
 	torch.save(op,deep_cqa.insurance,'binary')
 end
-function deep_cqa.load_insurance_binary()
+function deep_cqa.ins_meth.load_binary()
 	local ip = deep_cqa.config.insurance.binary
 	deep_cqa.insurance = torch.load(ip)
 end
 ----------------------------------------
 --保险数据集，构建合适的训练数据和测试数据
-function deep_cqa.insurance.generate_train_set()
+function deep_cqa.ins_meth.generate_train_set()
 	local nsize = deep_cqa.config.insurance.negative_size
 	local train = {}
 	local dataset = deep_cqa.insurance
@@ -140,6 +140,7 @@ function deep_cqa.insurance.generate_train_set()
 		end
 	end
 end
+------------------------
 function deep_cqa.get_size(tab)
 	local count =0
 	for i,v in pairs(tab) do
@@ -147,13 +148,15 @@ function deep_cqa.get_size(tab)
 	end
 	return count
 end
-function deep_cqa.insurance.random_negative_id(list,size)
+-------------------------
+function deep_cqa.ins_meth.random_negative_id(list,size)
 	--随机获取一个answer id，该id不在传入的列表当中
 	math.randomseed(tostring(os.time()):reverse():sub(1, 7))
 	local id =nil
 	while true do
 		local mark = nil
 		id = math.random(1,size)
+		id = tostring(id)
 --		print('random',id,list,size)
 		for i = 1, #list do
 			if id == list[i] then
@@ -167,5 +170,5 @@ function deep_cqa.insurance.random_negative_id(list,size)
 	return id
 end
 ---------------
-function deep_cqa.insurance.generate_test_set()
+function deep_cqa.ins_meth.generate_test_set()
 end
