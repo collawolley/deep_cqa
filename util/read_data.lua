@@ -112,6 +112,7 @@ function deep_cqa.ins_meth.load_txt_dataset()
 	deep_cqa.ins_meth.load_test('test1')
 	deep_cqa.ins_meth.load_test('test2')
 end
+----------
 function deep_cqa.ins_meth.save_binary()
 	if deep_cqa.insurance == nil then
 		return nil
@@ -119,6 +120,7 @@ function deep_cqa.ins_meth.save_binary()
 	local op = deep_cqa.config.insurance.binary
 	torch.save(op,deep_cqa.insurance,'binary')
 end
+----------
 function deep_cqa.ins_meth.load_binary()
 	local ip = deep_cqa.config.insurance.binary
 	deep_cqa.insurance = torch.load(ip)
@@ -129,46 +131,70 @@ function deep_cqa.ins_meth.generate_train_set()
 	local nsize = deep_cqa.config.insurance.negative_size
 	local train = {}
 	local dataset = deep_cqa.insurance
-	local answer_size = deep_cqa.get_size(dataset['answer'])
+	local answer = dataset['answer']
+	local answer_size = deep_cqa.get_size(answer)
+	local seed =1
 	for num,item in pairs(dataset['train']) do
-		print(num)
 		local qst =item[1]
 		for i = 1,#item[2] do
-			local ta = dataset['answer'][item[2][i]]
-			local fa = deep_cqa.insurance.random_negative_id(item[2],answer_size)
-			print('generate',ta,fa)
+			for j =1, nsize do
+				local aid = item[2][i]
+				local aid = tostring(tonumber(aid))
+				local ta = answer[aid]
+				seed = seed + 5
+				local fa = deep_cqa.ins_meth.random_negative_id(item[2],answer_size,seed)
+				fa = answer[fa]
+				table.insert(train,{qst,ta,fa})
+			end
 		end
 	end
+	--table.sort(train,fuzzy_cmp)	--这条语句不能用
+	--print(train)
+	torch.save(deep_cqa.ins_meth.train,train)
+	return train
+end
+-------------------------------
+function fuzzy_cmp(a,b)	--比较函数的返回值不稳定，在lua中无法执行
+	--随机获取一个answer id，该id不在传入的列表当中
+	math.randomseed(tonumber(tostring(os.time()):reverse():sub(1, 7))+20000*deep_cqa.config.random_seed)
+	deep_cqa.config.random_seed =(deep_cqa.config.random_seed +3)%5000
+	if math.random()-0.5 > 0 then
+		return true
+	end
+	return false
 end
 ------------------------
 function deep_cqa.get_size(tab)
 	local count =0
+	local i=nil
+	local v=nil
 	for i,v in pairs(tab) do
 		count = count + 1
 	end
 	return count
 end
 -------------------------
-function deep_cqa.ins_meth.random_negative_id(list,size)
+function deep_cqa.ins_meth.random_negative_id(list,size,seed)
 	--随机获取一个answer id，该id不在传入的列表当中
-	math.randomseed(tostring(os.time()):reverse():sub(1, 7))
+	math.randomseed(tonumber(tostring(os.time()):reverse():sub(1, 7))+20000*seed)
 	local id =nil
 	while true do
 		local mark = nil
-		id = math.random(1,size)
-		id = tostring(id)
---		print('random',id,list,size)
+		id = math.random(size)
+		seed =seed + 1
 		for i = 1, #list do
-			if id == list[i] then
-				mark =1
+			if id == tonumber(list[i]) then
+				mark = 1
 			end
 		end
 		if mark == nil then
 			break
 		end
 	end
-	return id
+	return tostring(id)
 end
 ---------------
-function deep_cqa.ins_meth.generate_test_set()
+function deep_cqa.ins_meth.generate_test_set(name)
+	
+
 end

@@ -29,9 +29,12 @@ config.insurance.negative_size = 100
 -------------
 config.emd_dim = 300
 config.batch_size = 10
+config.random_seed =134
 
 deep_cqa.config = config
 deep_cqa.insurance = {}
+deep_cqa.ins_meth ={}
+deep_cqa.ins_meth.train = config.parent_path .. 'data/insurance_qa/' .. 'train_10.bin'
 -------------------------------
 include('util/vocab.lua')
 include('util/emd.lua')

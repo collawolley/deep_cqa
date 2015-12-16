@@ -10,7 +10,7 @@ function deep_cqa.read_embedding(vocab_path, emb_path)
 end
 ------------------------------------------------------------
 function deep_cqa.get_sub_embedding()
-	local dict	=	deep_cqa.Vocab(deep_cqa.config.dict)
+	local dict	=	deep_cqa.Vocab(deep_cqa.config.insurace.dict)
 	local emd_vec	=	deep_cqa.config.emd_vec
 	local emd_dict	=	deep_cqa.config.emd_dict
 	local emd_dim	=	deep_cqa.config.emd_dim
