@@ -16,30 +16,58 @@ function main( ... )
 end
 ---------------------------
 function get_model()
+--[[
+	--词嵌入以及权值加成的计算
 	local vec_dict,vecs = deep_cqa.get_sub_embedding()
 	deep_cqa.emd_dict =	vec_dict
 	deep_cqa.emd_vecs = vecs
 	local emd_layer = nn.LookupTable(vecs:size(1),deep_cqa.config.emd_dim)
 	emd_layer.weight:copy(vecs)
 	local avg_emd = deep_cqa.AvgEmd()
+--]]
+	--------------------------
+	--			margin 误差统计			-->	误差计算criterion
+	--			diff(1)作差				--> 共享层（误差是否能够传递通过这层）
+	--	sigmoid()			sigmoid()
+	--	线性(1)				线性(1)	--> 共享权重
+	--	并行(600)			并行(600)	--> 共享权重
 	
+	local inputs  = nn.Identity()()
+
 	local simple = nn.Sequential()
-	local parall = nn.Parallel(2,1)
-	--------------------------------
-	local a = nn.Sequential()
-	a:add(emd_layer)
-	a:add(deep_cqa.AvgEmd())
-	local q = nn.Sequential()
-	q:add(emd_layer)
-	q:add(deep_cqa.AvgEmd())
-	--------------------------------
-	parall:add(a)	--答案的向量生成
-	parall:add(q)	--问题的向量生成
-	simple:add(parall)	--二者向量拼接
-	simple:add(nn.Linear(600,20))	--线性变换
-	simple:add(nn.Sigmoid)			--非线性
-	simple:add(nn.Linear(20,2))		--线性变化为类的预测
-	simple:add(nn.Sigmoid)			--非线性变换
+	local merg = nn.Parallel(1,1)
+	
+	local ta_part = nn.Sequential()
+	local fa_part = nn.Sequential()
+	
+	local ta_emd = nn.Parallel(1,1)
+	local ta_a = nn.Sequential()
+	ta_a:add(emd_layer)
+	ta_a:add(avg_emd)
+	local ta_q = nn.Sequential()
+	ta_q:add(emd_layer)
+	ta_a:add(avg_emd)
+	ta_emd:add(ta_q)
+	ta_emd:add(ta_a)
+	ta_part:add(ta_emd)	--到这一步获得了一个600维的向量表示句子
+	ta_part:add(nn.Linear(600,1))
+	ta_part:add(nn.Sigmoid())
+	
+	local fa_emd = nn.Parallel(1,1)
+	local fa_a = nn.Sequential()
+	fa_a:add(emd_layer)
+	fa_a:add(avg_emd)
+	local fa_q = nn.Sequential()
+	fa_q:add(emd_layer)
+	fa_a:add(avg_emd)
+	fa_emd:add(fa_q)
+	fa_emd:add(fa_a)
+	fa_part:add(fa_emd)	--到这一步获得了一个600维的向量表示句子
+	fa_part:add(nn.Linear(600,1))
+	fa_part:add(nn.Sigmoid())
+	
+	local merg = nn.CSubTable(){ta_part,fa_part}
+
 
 	--------------------------------
 	return simple
