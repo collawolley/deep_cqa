@@ -40,5 +40,21 @@ include('util/vocab.lua')
 include('util/emd.lua')
 include('util/read_data.lua')
 include('simple_model/avg_emd.lua')
-deep_cqa.ins_meth.load_binary()
-deep_cqa.ins_meth.generate_train_set()
+--deep_cqa.ins_meth.load_binary()
+--deep_cqa.ins_meth.generate_train_set()
+
+function share_params(cell, src)
+	if torch.type(cell) == 'nn.gModule' then
+		for i = 1, #cell.forwardnodes do
+			local node = cell.forwardnodes[i]
+			if node.data.module then
+				node.data.module:share(src.forwardnodes[i].data.module,'weight', 'bias', 'gradWeight', 'gradBias')
+			end
+		end
+	elseif torch.isTypeOf(cell, 'nn.Module') then
+		cell:share(src, 'weight', 'bias', 'gradWeight', 'gradBias')
+	else
+		print(torch.type(cell))
+		error('parameters cannot be shared for this input')
+	end
+end

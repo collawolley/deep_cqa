@@ -29,61 +29,64 @@ function get_model()
 	--			margin 误差统计			-->	误差计算criterion
 	--			diff(1)作差				--> 共享层（误差是否能够传递通过这层）
 	--	sigmoid()			sigmoid()
-	--	线性(1)				线性(1)	--> 共享权重
+	--	线性(1)				线性(1)		--> 共享权重
 	--	并行(600)			并行(600)	--> 共享权重
+	local qst = nn.Identity()()		--问题的向量均值表达（也可以是前一层采用了RNN之类的方法实现） 300维
+	local t_ans = nn.Identity()()	--正确答案的向量表达（同上） 300维
+	local f_ans = nn.Identity()()	--错误。。。（同上）
+	local inputs  = {qst,t_ans.f_ans}
 	
-	local inputs  = nn.Identity()()
+	local t_rep = nn.JoinTable(1){qst,t_ans}	--两个向量做拼接，600维
+	local f_rep = nn.JoinTable(1){qst,f_ans}	--同上
 
-	local simple = nn.Sequential()
-	local merg = nn.Parallel(1,1)
+	local t_prob = nn.Linear(600,1)(t_rep)	--转换成为预测是否为正确答案的标量	
+	local f_prob = nn.Linear(600,1)(f_rep)	--转换成为预测是否为错误答案的标量
 	
-	local ta_part = nn.Sequential()
-	local fa_part = nn.Sequential()
-	
-	local ta_emd = nn.Parallel(1,1)
-	local ta_a = nn.Sequential()
-	ta_a:add(emd_layer)
-	ta_a:add(avg_emd)
-	local ta_q = nn.Sequential()
-	ta_q:add(emd_layer)
-	ta_a:add(avg_emd)
-	ta_emd:add(ta_q)
-	ta_emd:add(ta_a)
-	ta_part:add(ta_emd)	--到这一步获得了一个600维的向量表示句子
-	ta_part:add(nn.Linear(600,1))
-	ta_part:add(nn.Sigmoid())
-	
-	local fa_emd = nn.Parallel(1,1)
-	local fa_a = nn.Sequential()
-	fa_a:add(emd_layer)
-	fa_a:add(avg_emd)
-	local fa_q = nn.Sequential()
-	fa_q:add(emd_layer)
-	fa_a:add(avg_emd)
-	fa_emd:add(fa_q)
-	fa_emd:add(fa_a)
-	fa_part:add(fa_emd)	--到这一步获得了一个600维的向量表示句子
-	fa_part:add(nn.Linear(600,1))
-	fa_part:add(nn.Sigmoid())
-	
-	local merg = nn.CSubTable(){ta_part,fa_part}
+	t_prob = nn.gModule({qst,t_ans},t_prob)
+	f_prob = nn.gModule({qst,f_ans},f_prob)
+	share_params(t_prob,f_prob)
 
+	local t_sig = nn.Sigmoid()(t_prob)	--加一个sigmoid函数，约束值的范围
+	local f_sig = nn.Sigmoid()(f_prob)
 
-	--------------------------------
+	local sub  = nn.CSubTable{t_sig,f_sig}	--作差，优化的目标是使这个差逼近一个margin
+	local simple = nn.gModule(inputs,nn.Identity()(sub))
+	
 	return simple
-end
----------------------------
-function deep_cqa.get_next_corpus(size,train)
-
-
 end
 ---------------------------
 function train()
 	local simple = get_model()
 	local criterion = nn.BCECriterion()	--误差计算
 	local batch_size = deep_cqa.config.batch_size
-
-
 end
 ---------------------------
-get_model()
+Simple = {}
+Simple.vecs = nil
+Simple.dict = nil
+Simple.emd_layer = nil
+Simple.avg =nil
+function get300(sent)
+	if Simple.vecs == nil then
+		Simple.dict,Simple.vecs = deep_cqa.get_sub_embedding()
+		Simple.emd_layer = nn.LookupTable(vecs:size(1),deep_cqa.config.emd_dim)
+		Simple.emd_layer.weight:copy(vecs)
+		Simple.avg = deep_cqa.AvgEmd()
+	end
+	local idx = deep_cqa.read_one_sentence(sent,Simple.dict)
+	local vecs = Simple.emd_layer:forward(idx)
+	local ans = Simple.avg:forward(vecs)
+	
+	return ans
+end
+
+function demo()
+	local sents = {'the is a simple text file','how is the sun today','what happens last night'}
+	local simple = get_model()
+	local vecs = {}
+	for i =1,#sents do
+		vecs[i] = get300(sents[i])
+	end
+	simple:forward(vecs)
+end
+demo()
