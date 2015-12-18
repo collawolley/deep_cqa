@@ -10,7 +10,6 @@ end
 
 function AvgEmd:forward(inputs)
 	local size = inputs:size(1)
-	print('size',size)
 	local sum = torch.Tensor(self.in_dim):zero()
 	for i=1,size do
 		sum = sum + inputs[i]
