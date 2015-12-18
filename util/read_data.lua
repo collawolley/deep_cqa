@@ -130,6 +130,7 @@ end
 function deep_cqa.ins_meth.generate_train_set()
 	local nsize = deep_cqa.config.insurance.negative_size
 	local train = {}
+	train.size = 0
 	local dataset = deep_cqa.insurance
 	local answer = dataset['answer']
 	local answer_size = deep_cqa.get_size(answer)
@@ -145,6 +146,7 @@ function deep_cqa.ins_meth.generate_train_set()
 				local fa = deep_cqa.ins_meth.random_negative_id(item[2],answer_size,seed)
 				fa = answer[fa]
 				table.insert(train,{qst,ta,fa})
+				train.size =train.size+1
 			end
 		end
 	end

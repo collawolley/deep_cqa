@@ -25,7 +25,7 @@ config.insurance.test2 = config.parent_path .. 'data/insurance_qa/' .. 'test2.tx
 config.insurance.answer = config.parent_path .. 'data/insurance_qa/' .. 'answer.txt'
 config.insurance.dict = config.parent_path .. 'data/insurance_qa/' .. 'dict.txt'
 config.insurance.binary = config.parent_path .. 'data/insurance_qa/' .. 'full_dataset.bin'
-config.insurance.negative_size = 100
+config.insurance.negative_size = 1
 -------------
 config.emd_dim = 300
 config.batch_size = 10
@@ -40,8 +40,8 @@ include('util/vocab.lua')
 include('util/emd.lua')
 include('util/read_data.lua')
 include('simple_model/avg_emd.lua')
---deep_cqa.ins_meth.load_binary()
---deep_cqa.ins_meth.generate_train_set()
+deep_cqa.ins_meth.load_binary()
+deep_cqa.ins_meth.generate_train_set()
 
 function share_params(cell, src)
 	if torch.type(cell) == 'nn.gModule' then
