@@ -28,7 +28,7 @@ function deep_cqa.read_sentences(path,vocab)
 end
 --------------------------------------------------------
 --将一个句子转换成为字典索引编码的格式，每个句子一个向量
-function deep_cqa.read_one_sentece(sent,vocab)
+function deep_cqa.read_one_sentence(sent,vocab)
 	local tokens = stringx.split(sent)
 	local vecs = torch.IntTensor(#tokens)
 	for i = 1 , #tokens do

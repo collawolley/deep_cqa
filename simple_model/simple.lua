@@ -19,24 +19,21 @@ function get_model()
 	local qst = nn.Identity()()		--问题的向量均值表达（也可以是前一层采用了RNN之类的方法实现） 300维
 	local t_ans = nn.Identity()()	--正确答案的向量表达（同上） 300维
 	local f_ans = nn.Identity()()	--错误。。。（同上）
-	local inputs  = {qst,t_ans.f_ans}
---[[	
+
 	local t_rep = nn.JoinTable(1)({qst,t_ans})	--两个向量做拼接，600维
 	local f_rep = nn.JoinTable(1)({qst,f_ans})	--同上
 
 	local t_prob = nn.Linear(600,1)(t_rep)	--转换成为预测是否为正确答案的标量	
 	local f_prob = nn.Linear(600,1)(f_rep)	--转换成为预测是否为错误答案的标量
-	
-	--t_prob = nn.gModule({qst,t_ans},t_prob)
-	--f_prob = nn.gModule({qst,f_ans},f_prob)
-	--share_params(t_prob,f_prob)
+	--print(	t_prob.data)
+--	t_prob.data.module:share(f_prob.data.module,'weight')
+	share_params(t_prob,f_prob)
 
 	local t_sig = nn.Sigmoid()(t_prob)	--加一个sigmoid函数，约束值的范围
 	local f_sig = nn.Sigmoid()(f_prob)
 
 	local sub  = nn.CSubTable()({t_sig,f_sig})	--作差，优化的目标是使这个差逼近一个margin
---]]
-	local sub = nn.CAddTable()({qst,t_ans,f_ans})
+--	local sub = nn.CAddTable()({qst,t_ans,f_ans})
 	local simple = nn.gModule({qst,t_ans,f_ans},{sub})
 	
 	return simple
@@ -69,6 +66,6 @@ function demo()
 	for i =1,#sents do
 		vecs[i] = get300(sents[i])
 	end
-	print(simple:forward(vecs))
+	simple:forward(vecs)
 end
 demo()

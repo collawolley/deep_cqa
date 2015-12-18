@@ -53,6 +53,8 @@ function share_params(cell, src)
 		end
 	elseif torch.isTypeOf(cell, 'nn.Module') then
 		cell:share(src, 'weight', 'bias', 'gradWeight', 'gradBias')
+	elseif torch.type(cell) == 'nngraph.Node' then
+		cell.data.module:share(src.data.module, 'weight', 'bias', 'gradWeight', 'gradBias')
 	else
 		print(torch.type(cell))
 		error('parameters cannot be shared for this input')

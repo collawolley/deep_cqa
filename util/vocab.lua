@@ -23,8 +23,7 @@ function Vocab:__init(path)
   end
   file:close()
 
-
- local unks = {'<unk>', '<UNK>', 'UUUNKKK'}
+  local unks = {'<unk>', '<UNK>', 'UUUNKKK'}
   for _, tok in pairs(unks) do
 	self.unk_index = self.unk_index or self._index[tok]
     if self.unk_index ~= nil then
@@ -32,6 +31,19 @@ function Vocab:__init(path)
       break
     end
   end
+--[[
+	--此段代码作废，因为在完整词向量的字典中，字典元素必须和词向量完全一致，否则无法得到对应索引，
+	--因此不能随意添加额外的单词
+	-- 最好在语料库的字典中添加'<unk>'以保证能够读取字典外的字符
+	-- 注意windows下传输过来的文件，要先转换成为unix格式，如换行符之类的 
+	if self.unk_token == nil then	--强制添加意外字符
+		self.unk_index = self.size+1
+		self.unk_token = '<unk>'
+		self.size = self.size + 1
+		self._tokens[self.size] = self.unk_token
+		self._index[self.unk_token] = self.size
+	end
+--]]
   local starts = {'<s>', '<S>'}
   for _, tok in pairs(starts) do
     self.start_index = self.start_index or self._index[tok]
