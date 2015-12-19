@@ -13,10 +13,18 @@ function get_model()
 	local fs_lstm = nn.Sequencer(f_lstm)(f_ans)
 	
 	share_params(ts_lstm,fs_lstm)	--共享参数
-	local reshape = nn.Reshape(50,1)(qs_lstm)
 
-	local tm = nn.MM()({reshape,ts_lstm})
-	local fm = nn.MM()({reshape,fs_lstm})
+	local qsl_lstm = nn.SelectTable(-1)(qs_lstm)
+	local tsl_lstm = nn.SelectTable(-1)(ts_lstm)
+	local fsl_lstm = nn.SelectTable(-1)(fs_lstm)
+
+	--local reshape = nn.Reshape(50)(qsl_lstm)
+--	reshape = nn.Reshape(50,1)(reshape)
+	
+	local tm = nn.MM()({qsl_lstm,tsl_lstm})
+	--local tm = nn.MM()({reshape,tsl_lstm})
+	--local fm = nn.MM()({reshape,fsl_lstm})
+	local fm = nn.MM()({qsl_lstm,fsl_lstm})
 
 	local sub = nn.CSubTable()({tm,fm})
 	local norm = nn.SoftSign()(sub)
@@ -47,8 +55,7 @@ function train()
 	local criterion = nn.MarginCriterion(0.5)
 	local params = nil
 	local grad_params =nil
-	local y =torch.Tensor(1)
-	y[1] = 1
+	local y =torch.Tensor({1})
 	params, grad_params = model:getParameters()
 	local optim_state = {learningRate = 0.05 }
 -----------------------
@@ -58,23 +65,17 @@ function train()
 			local sample = train_set[indices[i]]	--乱序选取
 			local vecs ={}
 			for j= 1,#sample do
-				vecs[j] =get_embeddings(sample[j]):clone()
-				print(j)
-				print(sample[j])
-				print(vecs[j]:size())
+				vecs[j] = get_embeddings(sample[j]):clone()
+				vecs[j] = vecs[j]:chunk(vecs[j]:size(1),1)
+				--print(vecs[j]:size(1))
 			end
 			y[1] = 1
-		--[[
 			if i%2 ==1 then 
 				local tmp =vecs[2]
 				vecs[2] = vecs[3]
 				vecs[3] = tmp
 				y[1] = -1
 			end
-			--]]
-			print(vecs[1]:size())
-			print(vecs[2]:size())
-			print(vecs[3]:size())
 			local pred = model:forward(vecs)
 			local loss = criterion:forward(pred,y)
 			local obj_grad = criterion:backward(pred,y)
@@ -91,7 +92,8 @@ function train()
 		local sample = train_set[indices[i]]	--乱序选取
 		local vecs ={}
 		for j= 1,#sample do
-			vecs[j] =get_embeddings(sample[j])
+				vecs[j] = get_embeddings(sample[j]):clone()
+				vecs[j] = vecs[j]:chunk(vecs[j]:size(1),1)
 		end
 		local pred = model:forward(vecs)
 		if pred > 0 then
