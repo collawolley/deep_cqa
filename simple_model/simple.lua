@@ -82,7 +82,7 @@ function train()
 	local train_set = torch.load(deep_cqa.ins_meth.train)
 	local indices = torch.randperm(train_set.size)
 	local simple = get_model()
-	local criterion = nn.MarginCriterion(1)
+	local criterion = nn.MarginCriterion(0.3)
 	local params = nil
 	local grad_params =nil
 	local y =torch.Tensor(1)
@@ -96,7 +96,7 @@ function train()
 			local sample = train_set[idx]
 			local vecs ={}
 			for j=1 ,#sample do
-				vecs[j] = get300(sample[j])
+				vecs[j] = get300(sample[j]):clone()
 			end
 			local pred = simple:forward(vecs)
 			if pred[1] > 0.0 then
@@ -112,7 +112,7 @@ function train()
 			local sample = train_set[idx]
 			local vecs ={}
 			for j=1 ,#sample do
-				vecs[j] = get300(sample[j])
+				vecs[j] = get300(sample[j]):clone()
 			end
 			local pred = simple:forward(vecs)
 			loss = criterion:forward(pred,y)
@@ -125,7 +125,7 @@ function train()
 			return loss,grad_params
 		end
 		optim.adagrad(feval,params,optim_state)
-		xlua.progress(i,train_set.size-12000)
+		xlua.progress(i-train_set.size+1000,1000)
 	end
 	 c_count= 0
 	for i = train_set.size-1000,train_set.size do
@@ -133,7 +133,7 @@ function train()
 			local sample = train_set[idx]
 			local vecs ={}
 			for j=1 ,#sample do
-				vecs[j] = get300(sample[j])
+				vecs[j] = get300(sample[j]):clone()
 			end
 			local pred = simple:forward(vecs)
 			if pred[1] > 0 then
