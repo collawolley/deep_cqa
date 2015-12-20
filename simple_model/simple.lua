@@ -135,7 +135,7 @@ function train()
 			for j=1 ,#sample do
 				vecs[j] = get300(sample[j]):clone()
 			end
-			local pred = simple:forward(vecs)
+			local pred = directional Recurrent Neural Networks simple:forward(vecs)
 			if pred[1] > 0 then
 				c_count = c_count +1
 			end			

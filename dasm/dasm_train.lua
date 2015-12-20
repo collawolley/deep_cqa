@@ -5,9 +5,9 @@ function get_model()
 	local t_ans =nn.Identity()()
 	local f_ans =nn.Identity()()
 	--三个输入
-	local q_lstm = nn.LSTM(300,50,9999)	--输入300 输出50 最长序列9999
-	local t_lstm = nn.LSTM(300,50,9999)
-	local f_lstm = nn.LSTM(300,50,9999)
+	local q_lstm = nn.FastLSTM(300,30,100)	--输入300 输出50 最长序列100
+	local t_lstm = nn.FastLSTM(300,30,100)
+	local f_lstm = nn.FastLSTM(300,30,100)
 	local qs_lstm = nn.Sequencer(q_lstm)(qst)
 	local ts_lstm = nn.Sequencer(t_lstm)(t_ans)
 	local fs_lstm = nn.Sequencer(f_lstm)(f_ans)
@@ -18,17 +18,17 @@ function get_model()
 	local tsl_lstm = nn.SelectTable(-1)(ts_lstm)
 	local fsl_lstm = nn.SelectTable(-1)(fs_lstm)
 
-	--local reshape = nn.Reshape(50)(qsl_lstm)
---	reshape = nn.Reshape(50,1)(reshape)
+	local reshape = nn.Reshape(30,1)(qsl_lstm)
+	tsl_lstm = nn.Reshape(1,30)(tsl_lstm)
+	fsl_lstm = nn.Reshape(1,30)(fsl_lstm)
 	
-	local tm = nn.MM()({qsl_lstm,tsl_lstm})
-	--local tm = nn.MM()({reshape,tsl_lstm})
-	--local fm = nn.MM()({reshape,fsl_lstm})
-	local fm = nn.MM()({qsl_lstm,fsl_lstm})
+	local tm = nn.MM()({reshape,tsl_lstm})
+	local fm = nn.MM()({reshape,fsl_lstm})
 
 	local sub = nn.CSubTable()({tm,fm})
 	local norm = nn.SoftSign()(sub)
-	local linear = nn.Linear(2500,1)(norm)
+	local line = nn.Reshape(900)(norm)
+	local linear = nn.Linear(900,1)(line)
 	local model = nn.gModule({qst,t_ans,f_ans},{linear})
 	return model
 end
@@ -52,14 +52,14 @@ function train()
 	local model = get_model()
 	local train_set = torch.load(deep_cqa.ins_meth.train)
 	local indices = torch.randperm(train_set.size)
-	local criterion = nn.MarginCriterion(0.5)
+	local criterion = nn.MarginCriterion(1)
 	local params = nil
 	local grad_params =nil
 	local y =torch.Tensor({1})
 	params, grad_params = model:getParameters()
 	local optim_state = {learningRate = 0.05 }
 -----------------------
-	for i = 1 , train_set.size- 1000 do
+	for i = 1 , train_set.size/20 do
 		local feval = function (x)
 			grad_params:zero()
 			local sample = train_set[indices[i]]	--乱序选取
@@ -84,11 +84,12 @@ function train()
 			return loss,grad_params
 		end
 		optim.adagrad(feval,params,optim_state)
-		xlua.progress(i,train_set.size-1000)
+		xlua.progress(i,train_set.size/20)
 	end
+	print('test')
 --------------------------
 	local c_count = 0
-	for i = train_set.size-999 , train_set.size do
+	for i = 1 , train_set.size/20 do
 		local sample = train_set[indices[i]]	--乱序选取
 		local vecs ={}
 		for j= 1,#sample do
@@ -96,12 +97,13 @@ function train()
 				vecs[j] = vecs[j]:chunk(vecs[j]:size(1),1)
 		end
 		local pred = model:forward(vecs)
-		if pred > 0 then
+		if pred[1][1] > 0 then
 			c_count = c_count+1
 		end
+		xlua.progress(i,train_set.size/20)
 			--local loss = criterion:forward(pred,y)
 	end
-	print(c_count*1.0/1000)
+	print(c_count*1.0/(train_set.size/20))
 end
 
 train()
