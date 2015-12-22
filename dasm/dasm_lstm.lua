@@ -1,26 +1,26 @@
 require('..')
 
 function get_model()
-	local lstm_config ={
-		in_dim = 300,
-		mem_dim = 30,
-		number_layers = 1,
-		gate_output = true,
-	}
 	local qst = nn.Identity()()
 	local t_ans =nn.Identity()()
 	local f_ans =nn.Identity()()
 	--三个输入
-	local q_lstm = deep_cqa.LSTM(lstm_config)(qst)	
-	local t_lstm = deep_cqa.LSTM(lstm_config)(t_ans)	--输入300 输出30
-	local f_lstm = deep_cqa.LSTM(lstm_config)(f_ans)	--输入300 输出30
+	local q_lstm = nn.FastLSTM(300,30,100)	--输入300 输出50 最长序列100
+	local t_lstm = nn.FastLSTM(300,30,100)
+	local f_lstm = nn.FastLSTM(300,30,100)
+	local qs_lstm = nn.Sequencer(q_lstm)(qst)
+	local ts_lstm = nn.Sequencer(t_lstm)(t_ans)
+	local fs_lstm = nn.Sequencer(f_lstm)(f_ans)
 	
-	share_params(t_lstm,f_lstm)	--共享参数
+	share_params(ts_lstm,fs_lstm)	--共享参数
 
+	local qsl_lstm = nn.SelectTable(-1)(qs_lstm)
+	local tsl_lstm = nn.SelectTable(-1)(ts_lstm)
+	local fsl_lstm = nn.SelectTable(-1)(fs_lstm)
 
-	local reshape = nn.Reshape(30,1)(q_lstm)
-	tsl_lstm = nn.Reshape(1,30)(t_lstm)
-	fsl_lstm = nn.Reshape(1,30)(f_lstm)
+	local reshape = nn.Reshape(30,1)(qsl_lstm)
+	tsl_lstm = nn.Reshape(1,30)(tsl_lstm)
+	fsl_lstm = nn.Reshape(1,30)(fsl_lstm)
 	
 	local tm = nn.MM()({reshape,tsl_lstm})
 	local fm = nn.MM()({reshape,fsl_lstm})
