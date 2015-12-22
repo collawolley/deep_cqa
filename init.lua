@@ -7,6 +7,7 @@ require('xlua')
 require('sys')
 require('lfs')
 require('rnn')
+require('cunn')
 deep_cqa = {}
 -------------------------------
 --项目的目录配置部分
