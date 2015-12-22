@@ -1,13 +1,13 @@
 require('..')
-
+emd_dim = deep_cqa.config.emd_dim
 function get_model()
 	local qst = nn.Identity()()
 	local t_ans =nn.Identity()()
 	local f_ans =nn.Identity()()
 	--三个输入
-	local q_lstm = nn.FastLSTM(300,30,100)	--输入300 输出50 最长序列100
-	local t_lstm = nn.FastLSTM(300,30,100)
-	local f_lstm = nn.FastLSTM(300,30,100)
+	local q_lstm = nn.FastLSTM(emd_dim,30,100)	--输入300 输出50 最长序列100
+	local t_lstm = nn.FastLSTM(emd_dim,30,100)
+	local f_lstm = nn.FastLSTM(emd_dim,30,100)
 	local qs_lstm = nn.Sequencer(q_lstm)(qst)
 	local ts_lstm = nn.Sequencer(t_lstm)(t_ans)
 	local fs_lstm = nn.Sequencer(f_lstm)(f_ans)
