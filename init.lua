@@ -61,7 +61,6 @@ include('util/vocab.lua')
 include('util/emd.lua')
 include('util/read_data.lua')
 include('simple_model/avg_emd.lua')
-include('models/LSTM.lua')
 --deep_cqa.ins_meth.load_binary()
 --deep_cqa.ins_meth.generate_train_set()
 
