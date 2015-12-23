@@ -185,9 +185,11 @@ function getlm()
 	lm.arsp = nn.Reshape(1,cfg.mem):cuda()
 	
 	lm.mm = nn.MM():cuda()
+	print(cfg.mem^2)
 	lm.lin = nn.Linear(cfg.mem^2,1):cuda()
 	lm.cm = nn.Sequential()
 	lm.cm:add(lm.mm)
+	lm.cm:add(nn.Reshape(cfg.mem^2))
 	lm.cm:add(lm.lin)
 	lm.cm:add(nn.SoftSign())
 	lm.cm:cuda()
@@ -199,24 +201,24 @@ function test2()
 	local lm = getlm()
 	local train_set = torch.load(deep_cqa.ins_meth.train)
 	local indices = torch.randperm(train_set.size)
-	local criterion = nn.MarginCriterion(1)
+	local criterion = nn.MarginCriterion(1):cuda()
 	local gold = torch.Tensor({1}):cuda()
-	local batch_size = 10
+	local batch_size = 100
 	local optim_state = {learningRate = 0.05 }
+	
 	for i= 1,train_set.size,batch_size do
-		local size = math.min(i+batch_size-1,batch_size)-i+1
+		local size = math.min(i+batch_size-1,train_set.size)-i+1
 	--	local feval = function(x)
 		--	grad_params:zero()
 			local loss = 0	--累积的损失
 			for j = 1,size do
-			--	xlua.progress(i+j-1,train_set.size)
+				xlua.progress(i+j-1,train_set.size)
 				local idx = indices[i+j-1]
 				local sample = train_set[idx]
-				print(sample)
 				local vecs={}
 				for k =1,#sample do
 					local index = get_index(sample[k])
-					vecs[k] = lm.emd:forward(index):clone()
+					vecs[k] = lm.emd:forward(index):clone():cuda()
 				end
 				
 				if(idx %2 ==0) then
@@ -225,20 +227,28 @@ function test2()
 				else
 					gold[1] = 1
 				end
-				local r1 = lm.qlstm:forward(vecs[1]:cuda())
+				local r1 = lm.qlstm:forward(vecs[1])
 				
-				local r2 = lm.tlstm:forward(vecs[2]:cuda())
-				local r3 = lm.flstm:forward(vecs[3]:cuda())
-				print(r2,r3)
+				local r2 = lm.tlstm:forward(vecs[2])
+				local r3 = lm.flstm:forward(vecs[3])
+				--print(r2,r3)
 				local r4 = lm.sub:forward({r2,r3})
 				local r5 = lm.qrsp:forward(r1)
 				local r6 = lm.arsp:forward(r4)
 				local pred = lm.cm:forward({r5,r6})
-				print(pred)
---[[
 				local loss = loss + criterion:forward(pred,gold)
+
+				local e1 = criterion:backward(pred,gold)
+				local e2 = lm.cm:backward({r5,r6},e1)
+				local e3 = lm.qrsp:backward(r1,e2[1])
+				local e4 = lm.arsp:backward(r4,e2[2])
+				local e5 = lm.sub:backward({r2,r3},e4)
+				local e6 = lm.tlstm:backward(vecs[2],e5[1])
+				local e7 = lm.flstm:backward(vecs[3],e5[2])
+				local e8 = lm.qlstm:backward(vecs[1],e3)
+
+--[[
 				
-				local obj_grad = criterion:backward(pred,gold)
 				local lstm_grad = model:backward(vecs,obj_grad:cuda())
 --]]		
 				
