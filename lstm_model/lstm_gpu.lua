@@ -36,7 +36,7 @@ end
 function getlm()
 	get_index('today is')
 	local lm = {}
-	lm.emd = cfg.emd
+	lm.emd = cfg.emd:cuda()
 
 	lm.qlstm = nn.Sequential()
 	lm.qlstm:add(nn.Identity())
@@ -81,7 +81,7 @@ cfg.lm = getlm()
 function train()
 	local lm = cfg.lm
 
-	local modules = nn.Parallel():add(lm.qlstm):add(lm.tlstm):add(lm.flstm):add(lm.sub):add(lm.qrsp):add(lm.arsp):add(lm.mm)
+	local modules = nn.Parallel():add(lm.emd):add(lm.qlstm):add(lm.tlstm):add(lm.flstm):add(lm.sub):add(lm.qrsp):add(lm.arsp):add(lm.mm)
 	params,grad_params = modules:getParameters()
 
 	local train_set = torch.load(deep_cqa.ins_meth.train)
@@ -102,8 +102,8 @@ function train()
 				local sample = train_set[idx]
 				local vecs={}
 				for k =1,#sample do
-					local index = get_index(sample[k])
-					vecs[k] = lm.emd:forward(index):clone():cuda()
+					local index = get_index(sample[k]):cuda()
+					vecs[k] = lm.emd:forward(index):clone()
 				end
 				
 				if(idx %2 ==0) then
@@ -141,19 +141,22 @@ function train()
 	end
 end
 ------------------------------------------------------------------------
-function test_one_pair(qst,ans)
+function test_one_pair(qst,ans,k)
 	--给定一个问答pair，计算其相似度	
 	--传入的qst为已经计算好的向量，ans为未经处理的句子
 	--print(qst,ans)
+--[[
 	local lm = cfg.lm
-	local aidx = get_index(ans)
-	local aemd = lm.emd:forward(aidx):clone():cuda()
+	local aidx = get_index(ans):cuda()
+	local aemd = lm.emd:forward(aidx):clone()
 	local avec = lm.tlstm:forward(aemd)
 	local r5 = lm.qrsp:forward(qst)
 	local r6 = lm.arsp:forward(avec)
 	local pred = lm.cm:forward({r5,r6})
 
 	return pred
+--]]
+	return 0.5+k
 end
 function evaluate(name)
 	--评估训练好的模型的精度，top 1是正确答案的比例
@@ -162,42 +165,56 @@ function evaluate(name)
 	local test_set = deep_cqa.insurance[name]
 	local answer_set = deep_cqa.insurance['answer']
 	if(test_set == nil) then
-		print('测试集载入为空！')
-		return 
+		print('测试集载入为空！') return 
 	end
 	local lm = cfg.lm	--语言模型
 	for i,v in pairs(test_set) do
 		local gold = v[1]	--正确答案的集合
 		local qst = v[2]	--问题
 		local candidates = v[3] --候选的答案
-		local qidx = get_index(qst)
-		local qemd = lm.emd:forward(qidx):clone():cuda()
+		
+		local qidx = get_index(qst):cuda()
+		local qemd = lm.emd:forward(qidx):clone()
 		local qvec = lm.qlstm:forward(qemd)
-		local sc = {}
-		local maxScore = -1000000
-		for k,c in pairs(candidates) do
+		
+		local sc = {}	
+		local gold_sc ={}
+		local gold_rank = {}
+		
+		for k,c in pairs(gold) do 
 			c =tostring(tonumber(c))
-			local score = test_one_pair(qvec,answer_set[c])
-			sc[c] = score[1]
-			if score[1] > maxScore then maxScore = score[1] end
+			local score = test_one_pair(qvec,answer_set[c],k)	--标准答案的得分
+			gold_sc[k] = score
+			gold_rank[k] = 1	--初始化排名
 		end
-		print('maxScore',maxScore)
-		for k,c in pairs(gold) do
-			c = tostring(tonumber(c))
-			print('goldenScore',sc[c])
-			if sc[c] >= maxScore then
-				print('正确')
-				right_count = right_count + 1
-				break
+
+		for k,c in pairs(candidates) do 
+			c =tostring(tonumber(c))
+			local score = test_one_pair(qvec,answer_set[c],k)
+			for m,n in pairs(gold_sc) do
+		
+				if score > n then
+					gold_rank[m] = gold_rank[m]+1
+				end
 			end
 		end
+		
+		local mark =false
+		local mrr = 0
+		for k,c in pairs(gold_rank) do
+			if c==1 then 
+				mark = true
+			end
+			mrr = mrr + 1.0/c
+		end
+		print(mrr)
+		if mark then 
+			right_count = right_count +1 
+		end
 		pair_count = pair_count + 1
-	--	break
-
 	end
 	print('准确度',right_count,pair_count,right_count*1.0/pair_count)
 end
-train()
+--train()
 evaluate('dev')
-print('\n')
 
