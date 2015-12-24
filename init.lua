@@ -21,9 +21,11 @@ config.emd_dict = config.parent_path .. 'data/glove/glove.840B.vocab'
 config.emd_dim = 300
 --]]
 ------
+--[[
 config.emd_vec = config.parent_path .. 'data/word2vec/SG_10.vec'
 config.emd_dict = config.parent_path .. 'data/word2vec/SG_10.dict'
 config.emd_dim = 10
+--]]
 ------
 --[[
 config.emd_vec = config.parent_path .. 'data/word2vec/SG_30.vec'
@@ -31,11 +33,11 @@ config.emd_dict = config.parent_path .. 'data/word2vec/SG_30.dict'
 config.emd_dim = 30
 --]]
 ------
---[[
+--[
 config.emd_vec = config.parent_path .. 'data/word2vec/SG_50.vec'
 config.emd_dict = config.parent_path .. 'data/word2vec/SG_50.dict'
 config.emd_dim = 50
---]]
+--]
 ------------
 config.insurance = {}
 config.insurance.train = config.parent_path .. 'data/insurance_qa/' .. 'train.txt'
