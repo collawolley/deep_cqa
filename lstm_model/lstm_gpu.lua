@@ -11,6 +11,7 @@ cfg.emd = nil
 cfg.dim = deep_cqa.config.emd_dim
 cfg.mem = 10
 cfg.batch  = 10
+deep_cqa.ins_meth.load_binary()
 -----------------------
 function get_index(sent)
 	--	获取一个句子的索引表达，作为整个模型的输入，可以直接应用到词向量层
@@ -74,9 +75,11 @@ function getlm()
 
 	return lm
 end
+
+cfg.lm = getlm()
 -------------------------
 function train()
-	local lm = getlm()
+	local lm = cfg.lm
 
 	local modules = nn.Parallel():add(lm.qlstm):add(lm.tlstm):add(lm.flstm):add(lm.sub):add(lm.qrsp):add(lm.arsp):add(lm.mm)
 	params,grad_params = modules:getParameters()
@@ -87,7 +90,7 @@ function train()
 	local gold = torch.Tensor({1}):cuda()
 	local batch_size = 100
 	local optim_state = {learningRate = 0.05 }
-	
+	train_set.size =1000
 	for i= 1,train_set.size,batch_size do
 		local size = math.min(i+batch_size-1,train_set.size)-i+1
 		local feval = function(x)
@@ -136,9 +139,65 @@ function train()
 		end
 		optim.adagrad(feval,params,optim_state)
 	end
-
 end
 ------------------------------------------------------------------------
+function test_one_pair(qst,ans)
+	--给定一个问答pair，计算其相似度	
+	--传入的qst为已经计算好的向量，ans为未经处理的句子
+	--print(qst,ans)
+	local lm = cfg.lm
+	local aidx = get_index(ans)
+	local aemd = lm.emd:forward(aidx):clone():cuda()
+	local avec = lm.tlstm:forward(aemd)
+	local r5 = lm.qrsp:forward(qst)
+	local r6 = lm.arsp:forward(avec)
+	local pred = lm.cm:forward({r5,r6})
+
+	return pred
+end
+function evaluate(name)
+	--评估训练好的模型的精度，top 1是正确答案的比例
+	local pair_count = 0
+	local right_count = 0
+	local test_set = deep_cqa.insurance[name]
+	local answer_set = deep_cqa.insurance['answer']
+	if(test_set == nil) then
+		print('测试集载入为空！')
+		return 
+	end
+	local lm = cfg.lm	--语言模型
+	for i,v in pairs(test_set) do
+		local gold = v[1]	--正确答案的集合
+		local qst = v[2]	--问题
+		local candidates = v[3] --候选的答案
+		local qidx = get_index(qst)
+		local qemd = lm.emd:forward(qidx):clone():cuda()
+		local qvec = lm.qlstm:forward(qemd)
+		local sc = {}
+		local maxScore = -1000000
+		for k,c in pairs(candidates) do
+			c =tostring(tonumber(c))
+			local score = test_one_pair(qvec,answer_set[c])
+			sc[c] = score[1]
+			if score[1] > maxScore then maxScore = score[1] end
+		end
+		print('maxScore',maxScore)
+		for k,c in pairs(gold) do
+			c = tostring(tonumber(c))
+			print('goldenScore',sc[c])
+			if sc[c] >= maxScore then
+				print('正确')
+				right_count = right_count + 1
+				break
+			end
+		end
+		pair_count = pair_count + 1
+	--	break
+
+	end
+	print('准确度',right_count,pair_count,right_count*1.0/pair_count)
+end
 train()
+evaluate('dev')
 print('\n')
 

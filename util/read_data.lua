@@ -150,22 +150,10 @@ function deep_cqa.ins_meth.generate_train_set()
 			end
 		end
 	end
-	--table.sort(train,fuzzy_cmp)	--这条语句不能用
-	--print(train)
 	torch.save(deep_cqa.ins_meth.train,train)
 	return train
 end
 -------------------------------
-function fuzzy_cmp(a,b)	--比较函数的返回值不稳定，在lua中无法执行
-	--随机获取一个answer id，该id不在传入的列表当中
-	math.randomseed(tonumber(tostring(os.time()):reverse():sub(1, 7))+20000*deep_cqa.config.random_seed)
-	deep_cqa.config.random_seed =(deep_cqa.config.random_seed +3)%5000
-	if math.random()-0.5 > 0 then
-		return true
-	end
-	return false
-end
-------------------------
 function deep_cqa.get_size(tab)
 	local count =0
 	local i=nil
@@ -196,7 +184,3 @@ function deep_cqa.ins_meth.random_negative_id(list,size,seed)
 	return tostring(id)
 end
 ---------------
-function deep_cqa.ins_meth.generate_test_set(name)
-	
-
-end
