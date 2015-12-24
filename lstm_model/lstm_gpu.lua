@@ -90,7 +90,7 @@ function train()
 	local gold = torch.Tensor({1}):cuda()
 	local batch_size = 100
 	local optim_state = {learningRate = 0.05 }
-	train_set.size =1000
+	train_set.size =5000
 	for i= 1,train_set.size,batch_size do
 		local size = math.min(i+batch_size-1,train_set.size)-i+1
 		local feval = function(x)
@@ -141,11 +141,10 @@ function train()
 	end
 end
 ------------------------------------------------------------------------
-function test_one_pair(qst,ans,k)
+function test_one_pair(qst,ans)
 	--给定一个问答pair，计算其相似度	
 	--传入的qst为已经计算好的向量，ans为未经处理的句子
-	--print(qst,ans)
---[[
+--[
 	local lm = cfg.lm
 	local aidx = get_index(ans):cuda()
 	local aemd = lm.emd:forward(aidx):clone()
@@ -154,20 +153,19 @@ function test_one_pair(qst,ans,k)
 	local r6 = lm.arsp:forward(avec)
 	local pred = lm.cm:forward({r5,r6})
 
-	return pred
---]]
-	return 0.5+k
+	return pred[1]
+--]
 end
 function evaluate(name)
 	--评估训练好的模型的精度，top 1是正确答案的比例
-	local pair_count = 0
-	local right_count = 0
 	local test_set = deep_cqa.insurance[name]
 	local answer_set = deep_cqa.insurance['answer']
 	if(test_set == nil) then
 		print('测试集载入为空！') return 
 	end
 	local lm = cfg.lm	--语言模型
+	local results = {}
+	
 	for i,v in pairs(test_set) do
 		local gold = v[1]	--正确答案的集合
 		local qst = v[2]	--问题
@@ -183,14 +181,14 @@ function evaluate(name)
 		
 		for k,c in pairs(gold) do 
 			c =tostring(tonumber(c))
-			local score = test_one_pair(qvec,answer_set[c],k)	--标准答案的得分
+			local score = test_one_pair(qvec,answer_set[c])	--标准答案的得分
 			gold_sc[k] = score
 			gold_rank[k] = 1	--初始化排名
 		end
 
 		for k,c in pairs(candidates) do 
 			c =tostring(tonumber(c))
-			local score = test_one_pair(qvec,answer_set[c],k)
+			local score = test_one_pair(qvec,answer_set[c])
 			for m,n in pairs(gold_sc) do
 		
 				if score > n then
@@ -207,14 +205,17 @@ function evaluate(name)
 			end
 			mrr = mrr + 1.0/c
 		end
-		print(mrr)
+		print(mrr,i)
 		if mark then 
-			right_count = right_count +1 
+			results[i] = {mrr,1.0}
+		else
+			results[i] = {mrr,0.0}
 		end
-		pair_count = pair_count + 1
+
 	end
-	print('准确度',right_count,pair_count,right_count*1.0/pair_count)
+	local results = torch.Tensor(results)
+	print(torch.sum(results,1)/results:size()[1])
 end
---train()
+train()
 evaluate('dev')
 
