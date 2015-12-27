@@ -62,13 +62,13 @@ function getlm()
 
 	local cov = nn.Sequential()
 	cov:add(nn.Replicate(1))	--增加维度的功能，好不容易才发现
-	cov:add(nn.SpatialConvolution(1,20,3,3,1,1,2,2))	--input需要是3维tensor
+	cov:add(nn.SpatialConvolution(1,200,3,3,1,1,2,2))	--input需要是3维tensor
 	cov:add(nn.SpatialAdaptiveMaxPooling(1,1))
-	cov:add(nn.Reshape(20))
+	cov:add(nn.Reshape(200))
 	cov:add(nn.Tanh())
 	
 	local mlp = nn.Sequential()	--一个简单的感知机
-	mlp:add(nn.Linear(20,3))
+	mlp:add(nn.Linear(200,3))
 	mlp:add(nn.Tanh())
 	mlp:add(nn.Linear(3,1))
 	mlp:add(nn.SoftSign())	--输出为归一化后的评分
@@ -100,7 +100,7 @@ function getlm()
 	return lm
 
 end
-function testlm()
+function testlm()	--应用修改模型后测试模型是否按照预期执行
 	local lm = getlm()
 	local criterion = nn.MarginCriterion(1):cuda()
 	local gold = torch.Tensor({0.5}):cuda()
@@ -162,7 +162,7 @@ function train()
 	local gold = torch.Tensor({0.5}):cuda()
 	local batch_size = cfg.batch
 	local optim_state = {learningRate = 0.05 }
-	train_set.size =2000
+	--train_set.size =4000
 	for i= 1,train_set.size,batch_size do
 		local size = math.min(i+batch_size-1,train_set.size)-i+1
 		local feval = function(x)
@@ -236,7 +236,7 @@ function evaluate(name)
 	local results = {}
 	print('test process:')
 	for i,v in pairs(test_set) do
-		xlua:progress(i,1000)
+		xlua.progress(i,1000)
 		local gold = v[1]	--正确答案的集合
 		local qst = v[2]	--问题
 		local candidates = v[3] --候选的答案
@@ -276,7 +276,7 @@ function evaluate(name)
 			end
 			mrr = mrr + 1.0/c
 		end
-		print(mrr,i)
+		--print(mrr,i)
 		if mark then 
 			results[i] = {mrr,1.0}
 		else
@@ -289,6 +289,6 @@ function evaluate(name)
 end
 --getlm()
 --testlm()
---train()
+train()
 evaluate('dev')
 
