@@ -10,7 +10,8 @@ cfg.dict = nil
 cfg.emd = nil
 cfg.dim = deep_cqa.config.emd_dim
 cfg.mem = 30
-cfg.batch  = deep_cqa.config.batch_size
+cfg.batch  = 50 or deep_cqa.config.batch_size
+deep_cqa.ins_meth.load_binary()
 -- deep_cqa.ins_meth.load_binary()	--保险数据集，这里载入是为了获得测试集和答案
 -----------------------
 function get_index(sent)
@@ -100,44 +101,65 @@ function getlm()
 
 end
 function testlm()
-	local ml = getlm()
+	local lm = getlm()
+	local criterion = nn.MarginCriterion(1):cuda()
+	local gold = torch.Tensor({0.5}):cuda()
+
 	local index1 = get_index('today is a good day'):clone()
 	local index2 = get_index('today is a very good day'):clone()
 	local index3 = get_index('This class creates an output where the input is replicated'):clone()
-	local vec1 = ml.emd:forward(index1):clone()
-	local vec2 = ml.emd:forward(index2):clone()
-	local vec3 = ml.emd:forward(index3):clone()
-	local rep1 = ml.qlstm:forward(vec1)
-	local rep2 = ml.tlstm:forward(vec2)
-	local rep3 = ml.flstm:forward(vec3)
-	--print(rep1:size(),rep2:size(),rep3:size())
-	local cos1 = ml.tq_cos:forward({rep1,rep2})
-	local cos2 = ml.fq_cos:forward({rep1,rep3})
-	local cov1= ml.tq_cov:forward(cos1)
-	local cov2= ml.fq_cov:forward(cos2)
-	print(cov1,cov2)
-	print(ml.tq_mlp:forward(cov1))
-	print(ml.fq_mlp:forward(cov2))
-	print('-------------------')
-	local r5 = ml.tq:forward({rep1,rep2})
-	local r6 = ml.fq:forward({rep1,rep3})
-	print(r5,r6)
-	local sub = ml.sub:forward({r5,r6})
-	print(sub)
+	local vec1 = lm.emd:forward(index1):clone()
+	local vec2 = lm.emd:forward(index2):clone()
+	local vec3 = lm.emd:forward(index3):clone()
+	
+	local rep1 = lm.qlstm:forward(vec1)
+	local rep2 = lm.tlstm:forward(vec2)
+	local rep3 = lm.flstm:forward(vec3)
+	local sc_1 = lm.tq:forward({rep1,rep2})
+	local sc_2 = lm.fq:forward({rep1,rep3})
+	local pred = lm.sub:forward({sc_1,sc_2})
+	
+	print(pred)
+	print(criterion:forward(pred,gold))
+				
+	local e1 = criterion:backward(pred,gold)
+	print('e1',e1)
+	local e2 = lm.sub:backward({sc_1,sc_2},e1)
+	print('e2',e2)
+	local e3 = lm.tq:backward({rep1,rep2},e2[1])
+	print('e3',e3)
+	local e4 = lm.fq:backward({rep1,rep3},e2[2])
+	print('e4',e4)
+--	local e5 = lm.qlstm:backward(vec1,e3[1])
+--	print('e5',e5)
+	local e6 = lm.qlstm:backward(vec1,(e4[1]+e3[1])/2)
+	print('e6',e6)
+	local e7 = lm.tlstm:backward(vec2,e3[2])
+	print('e7',e7)
+	local e8 = lm.flstm:backward(vec3,e4[2])
+	print('e8',e8)
+				
+
 end
 
 cfg.lm = getlm()
 -------------------------
 function train()
 	local lm = cfg.lm
-
-	local modules = nn.Parallel():add(lm.emd):add(lm.qlstm):add(lm.tlstm):add(lm.flstm):add(lm.sub):add(lm.qrsp):add(lm.arsp):add(lm.mm)
+	
+	local modules = nn.Parallel():add(lm.emd)
+	modules:add(lm.qlstm)
+	modules:add(lm.tlstm)
+	modules:add(lm.flstm)
+	modules:add(lm.tq)
+	modules:add(lm.fq)
+	modules:add(lm.sub)
 	params,grad_params = modules:getParameters()
 
 	local train_set = torch.load(deep_cqa.ins_meth.train)
 	local indices = torch.randperm(train_set.size)
 	local criterion = nn.MarginCriterion(1):cuda()
-	local gold = torch.Tensor({1}):cuda()
+	local gold = torch.Tensor({0.5}):cuda()
 	local batch_size = cfg.batch
 	local optim_state = {learningRate = 0.05 }
 	train_set.size =2000
@@ -152,34 +174,34 @@ function train()
 				local sample = train_set[idx]
 				local vecs={}
 				for k =1,#sample do
-					local index = get_index(sample[k]):cuda()
+					local index = get_index(sample[k]):clone():cuda()
 					vecs[k] = lm.emd:forward(index):clone()
 				end
 				
 				if(idx %2 ==0) then
 					vecs[3],vecs[2] = vecs[2],vecs[3]
-					gold[1] = -1
+					gold[1] = -0.5
 				else
-					gold[1] = 1
+					gold[1] = 0.5
 				end
 
-				local r1 = lm.qlstm:forward(vecs[1])
-				local r2 = lm.tlstm:forward(vecs[2])
-				local r3 = lm.flstm:forward(vecs[3])
-				local r4 = lm.sub:forward({r2,r3})
-				local r5 = lm.qrsp:forward(r1)
-				local r6 = lm.arsp:forward(r4)
-				local pred = lm.cm:forward({r5,r6})
+				local rep1 = lm.qlstm:forward(vecs[1])
+				local rep2 = lm.tlstm:forward(vecs[2])
+				local rep3 = lm.flstm:forward(vecs[3])
+				local sc_1 = lm.tq:forward({rep1,rep2})
+				local sc_2 = lm.fq:forward({rep1,rep3})
+				local pred = lm.sub:forward({sc_1,sc_2})
+				
 				local loss = loss + criterion:forward(pred,gold)
-
+				
 				local e1 = criterion:backward(pred,gold)
-				local e2 = lm.cm:backward({r5,r6},e1)
-				local e3 = lm.qrsp:backward(r1,e2[1])
-				local e4 = lm.arsp:backward(r4,e2[2])
-				local e5 = lm.sub:backward({r2,r3},e4)
-				local e6 = lm.tlstm:backward(vecs[2],e5[1])
-				local e7 = lm.flstm:backward(vecs[3],e5[2])
-				local e8 = lm.qlstm:backward(vecs[1],e3)
+				local e2 = lm.sub:backward({sc_1,sc_2},e1)
+				local e3 = lm.tq:backward({rep1,rep2},e2[1])
+				local e4 = lm.fq:backward({rep1,rep3},e2[2])
+				local e5 = lm.qlstm:backward(vecs[1],(e3[1]+e4[1])/2)
+				--local e6 = lm.qlstm:backward(vecs[1],e4[1])
+				local e7 = lm.tlstm:backward(vecs[2],e3[2])
+				local e8 = lm.flstm:backward(vecs[3],e4[2])
 				
 			end
 			grad_params = grad_params/size
@@ -198,12 +220,9 @@ function test_one_pair(qst,ans)
 	local lm = cfg.lm
 	local aidx = get_index(ans):cuda()
 	local aemd = lm.emd:forward(aidx):clone()
-	local avec = lm.tlstm:forward(aemd)
-	local r5 = lm.qrsp:forward(qst)
-	local r6 = lm.arsp:forward(avec)
-	local pred = lm.cm:forward({r5,r6})
-
-	return pred[1]
+	local alstm = lm.tlstm:forward(aemd)
+	local sim_sc = lm.tq:forward({qst,alstm})
+	return sim_sc
 --]
 end
 function evaluate(name)
@@ -215,8 +234,9 @@ function evaluate(name)
 	end
 	local lm = cfg.lm	--语言模型
 	local results = {}
-	
+	print('test process:')
 	for i,v in pairs(test_set) do
+		xlua:progress(i,1000)
 		local gold = v[1]	--正确答案的集合
 		local qst = v[2]	--问题
 		local candidates = v[3] --候选的答案
@@ -231,7 +251,7 @@ function evaluate(name)
 		
 		for k,c in pairs(gold) do 
 			c =tostring(tonumber(c))
-			local score = test_one_pair(qvec,answer_set[c])	--标准答案的得分
+			local score = test_one_pair(qvec,answer_set[c])[1]	--标准答案的得分
 			gold_sc[k] = score
 			gold_rank[k] = 1	--初始化排名
 		end
@@ -240,9 +260,8 @@ function evaluate(name)
 			thr = thr -1
 			if thr ==0 then break end
 			c =tostring(tonumber(c))
-			local score = test_one_pair(qvec,answer_set[c])
+			local score = test_one_pair(qvec,answer_set[c])[1]
 			for m,n in pairs(gold_sc) do
-		
 				if score > n then
 					gold_rank[m] = gold_rank[m]+1
 				end
@@ -268,8 +287,8 @@ function evaluate(name)
 	local results = torch.Tensor(results)
 	print(torch.sum(results,1)/results:size()[1])
 end
-getlm()
-testlm()
+--getlm()
+--testlm()
 --train()
---evaluate('dev')
+evaluate('dev')
 
