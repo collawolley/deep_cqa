@@ -36,7 +36,7 @@ function getlm()
 -------------------------------------
 	local pt = nn.Sequential()
 	pt:add(nn.SpatialAdaptiveMaxPooling(1,1))
-	pt:add(nn.Reshape(1000))
+	pt:add(nn.Reshape(2000))
 	pt:add(nn.Tanh())
 -------------------------------------
 	local hlq = nn.Linear(cfg.dim,200)
