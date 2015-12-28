@@ -9,8 +9,8 @@ cfg.vecs = nil
 cfg.dict = nil
 cfg.emd = nil
 cfg.dim = deep_cqa.config.emd_dim
-cfg.batch  = 50 or deep_cqa.config.batch_size
-cfg.gpu = true
+cfg.batch  = 10 or deep_cqa.config.batch_size
+cfg.gpu = false
 deep_cqa.ins_meth.load_binary()	--保险数据集，这里载入是为了获得测试集和答案
 -----------------------
 function get_index(sent)
@@ -28,7 +28,7 @@ end
 function getlm()
 	get_index('today is')
 -------------------------------------
-	local qcov = nn.SpatialConvolution(1,1000,3,3,1,1,2,2)	--input需要是3维tensor
+	local qcov = nn.SpatialConvolution(1,2000,3,3,1,1,2,2)	--input需要是3维tensor
 	local tcov = qcov:clone()
 	local fcov = qcov:clone()
 	share_params(qcov,tcov)
