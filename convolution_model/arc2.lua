@@ -10,6 +10,7 @@ cfg.dict = nil
 cfg.emd = nil
 cfg.dim = deep_cqa.config.emd_dim
 cfg.batch  = 50 or deep_cqa.config.batch_size
+cfg.gpu = true
 deep_cqa.ins_meth.load_binary()	--保险数据集，这里载入是为了获得测试集和答案
 -----------------------
 function get_index(sent)
@@ -71,6 +72,16 @@ function getlm()
 	lm.qf = nn.CosineDistance()
 	lm.sub = nn.PairwiseDistance(1)
 -------------------------------
+	if cfg.gpu then
+		lm.emd:cuda()
+		lm.qst:cuda()
+		lm.tas:cuda()
+		lm.fas:cuda()
+		lm.qt:cuda()
+		lm.qf:cuda()
+		lm.sub:cuda()
+	end
+-------------------------------
 	return lm
 
 end
@@ -78,11 +89,17 @@ function testlm()	--应用修改模型后测试模型是否按照预期执行
 	local lm = getlm()
 	local criterion = nn.MarginCriterion(1)
 	local gold = torch.Tensor({0.5})
-
+	
 	local index1 = get_index('today is a good day'):clone()
 	local index2 = get_index('today is a very good day'):clone()
 	local index3 = get_index('This class creates an output where the input is replicated'):clone()
-	
+	if cfg.gpu then
+		criterion:cuda()
+		gold =gold:cuda()
+		index1 = index1:cuda()
+		index2 = index2:cuda()
+		index3 = index3:cuda()
+	end
 	local vec1 = lm.emd:forward(index1):clone()
 	local vec2 = lm.emd:forward(index2):clone()
 	local vec3 = lm.emd:forward(index3):clone()
@@ -120,6 +137,10 @@ function train()
 	local indices = torch.randperm(train_set.size)
 	local criterion = nn.MarginCriterion(0.5)
 	local gold = torch.Tensor({0.5})
+	if cfg.gpu then
+		criterion:cuda()
+		gold = gold:cuda()
+	end
 	local batch_size = cfg.batch
 	local optim_state = {learningRate = 0.05 }
 	--train_set.size =40
@@ -135,6 +156,7 @@ function train()
 				local vecs={}
 				for k =1,#sample do
 					local index = get_index(sample[k]):clone()
+					if(cfg.gpu) then index = index:cuda() end
 					vecs[k] = lm.emd:forward(index):clone()
 				end
 				
@@ -181,6 +203,7 @@ function test_one_pair(qst,ans)
 --[
 	local lm = cfg.lm
 	local aidx = get_index(ans)
+	if cfg.gpu then aidx = aidx:cuda() end
 	local aemd = lm.emd:forward(aidx):clone()
 	local arep = lm.tas:forward(aemd)
 	local sim_sc = lm.qt:forward({qst,arep})
@@ -204,6 +227,7 @@ function evaluate(name)
 		local candidates = v[3] --候选的答案
 		
 		local qidx = get_index(qst)
+		if cfg.gpu then qidx = qidx:cuda() end
 		local qemd = lm.emd:forward(qidx):clone()
 		local qvec = lm.qst:forward(qemd)
 		
@@ -238,7 +262,6 @@ function evaluate(name)
 			end
 			mrr = mrr + 1.0/c
 		end
-		--print(mrr,i)
 		if mark then 
 			results[i] = {mrr,1.0}
 		else
