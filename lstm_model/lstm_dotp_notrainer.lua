@@ -44,7 +44,7 @@ function getlm()
 
 	lm.sub = nn.CSubTable():cuda()
 	local score = nn.Sequential()
-	score:add(nn.DotProduct())
+	score:add(nn.CosineDistance())
 	score:add(nn.SoftSign()):cuda()
 	lm.score = score
 	return lm
@@ -84,7 +84,7 @@ function train()
 		local r2 = lm.tlstm:forward(vecs[2])
 		local r3 = lm.flstm:forward(vecs[3])
 		local r4 = lm.sub:forward({r2,r3})
-		local pred = lm.score:forward({r4,r1})
+		local pred = 1-lm.score:forward({r4,r1})
 
 		criterion:forward(pred,gold)
 		
@@ -120,7 +120,7 @@ function test_one_pair(qst,ans)
 	local avec = lm.tlstm:forward(aemd)
 	local r5 = lm.score:forward({qst,avec})
 
-	return r5[1]
+	return 1-r5[1]
 --]
 end
 function evaluate(name)
