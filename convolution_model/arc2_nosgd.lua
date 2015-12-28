@@ -163,7 +163,7 @@ function train()
 		local sc_2 = lm.qf:forward({rep1,rep3})
 		local pred = lm.sub:forward({sc_2,sc_1})	-- 因为是距离参数转换为相似度参数，所以是负样本减正样本
 				
-		local loss = loss + criterion:forward(pred,gold)
+		criterion:forward(pred,gold)
 
 		lm.sub:zeroGradParameters()
 		lm.qt:zeroGradParameters()
