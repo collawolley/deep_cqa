@@ -7,7 +7,7 @@ require('xlua')
 require('sys')
 require('lfs')
 require('rnn')
-require('cunn')
+--require('cunn')
 deep_cqa = {}
 -------------------------------
 --项目的目录配置部分
@@ -78,6 +78,24 @@ function share_params(cell, src)
 		cell:share(src, 'weight', 'bias', 'gradWeight', 'gradBias')
 	elseif torch.type(cell) == 'nngraph.Node' then
 		cell.data.module:share(src.data.module, 'weight', 'bias', 'gradWeight', 'gradBias')
+	else
+		print(torch.type(cell))
+		error('parameters cannot be shared for this input')
+	end
+end
+
+function share_weights(cell, src)	--仅仅共享权重，导数不共享，这样在多个模块共享参数的时候，不影响各自求导
+	if torch.type(cell) == 'nn.gModule' then
+		for i = 1, #cell.forwardnodes do
+			local node = cell.forwardnodes[i]
+			if node.data.module then
+				node.data.module:share(src.forwardnodes[i].data.module,'weight', 'bias')
+			end
+		end
+	elseif torch.isTypeOf(cell, 'nn.Module') then
+		cell:share(src, 'weight', 'bias')
+	elseif torch.type(cell) == 'nngraph.Node' then
+		cell.data.module:share(src.data.module, 'weight', 'bias')
 	else
 		print(torch.type(cell))
 		error('parameters cannot be shared for this input')

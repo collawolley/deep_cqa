@@ -142,58 +142,53 @@ function train()
 		gold = gold:cuda()
 	end
 	local batch_size = cfg.batch
-	local optim_state = {learningRate = 0.05 }
+	local learningRate = 0.01
 	--train_set.size =40
-	for i= 1,train_set.size,batch_size do
-		local size = math.min(i+batch_size-1,train_set.size)-i+1
-		local feval = function(x)
-			grad_params:zero()
-			local loss = 0	--累积的损失
-			for j = 1,size do
-				xlua.progress(i+j-1,train_set.size)
-				local idx = indices[i+j-1]
-				local sample = train_set[idx]
-				local vecs={}
-				for k =1,#sample do
-					local index = get_index(sample[k]):clone()
-					if(cfg.gpu) then index = index:cuda() end
-					vecs[k] = lm.emd:forward(index):clone()
-				end
-				
-				if(idx %2 ==0) then
-					vecs[3],vecs[2] = vecs[2],vecs[3]
-					gold[1] = -0.5
-				else
-					gold[1] = 0.5
-				end
-
-				local rep1 = lm.qst:forward(vecs[1])
-				local rep2 = lm.tas:forward(vecs[2])
-				local rep3 = lm.fas:forward(vecs[3])
-				
-
-				local sc_1 = lm.qt:forward({rep1,rep2})
-				local sc_2 = lm.qf:forward({rep1,rep3})
-				local pred = lm.sub:forward({sc_2,sc_1})	-- 因为是距离参数转换为相似度参数，所以是负样本减正样本
-				
-				local loss = loss + criterion:forward(pred,gold)
-				
-				local e1 = criterion:backward(pred,gold)
-				local e2 = lm.sub:backward({sc_2,sc_1},e1)
-				local e3 = lm.qt:backward({rep1,rep2},e2[2])
-				local e4 = lm.qf:backward({rep1,rep3},e2[1])
-				
-				local e5 = lm.qst:backward(vecs[1],(e3[1]+e4[1])/2)
-				local e7 = lm.tas:backward(vecs[2],e3[2])
-				local e8 = lm.fas:backward(vecs[3],e4[2])
-				
-			end
-			grad_params = grad_params/size
-			loss = loss / size
-			loss = loss + 1e-4*params:norm()^2
-			return loss,grad_params		
+	for i= 1,train_set.size do
+		xlua.progress(i,train_set.size)
+		local idx = indices[i]
+		local sample = train_set[idx]
+		local vecs={}
+		for k =1,#sample do
+			local index = get_index(sample[k]):clone()
+			if(cfg.gpu) then index = index:cuda() end
+			vecs[k] = lm.emd:forward(index):clone()
 		end
-		optim.adagrad(feval,params,optim_state)
+		
+		local rep1 = lm.qst:forward(vecs[1])
+		local rep2 = lm.tas:forward(vecs[2])
+		local rep3 = lm.fas:forward(vecs[3])
+				
+		local sc_1 = lm.qt:forward({rep1,rep2})
+		local sc_2 = lm.qf:forward({rep1,rep3})
+		local pred = lm.sub:forward({sc_2,sc_1})	-- 因为是距离参数转换为相似度参数，所以是负样本减正样本
+				
+		criterion:forward(pred,gold)
+
+		lm.sub:zeroGradParameters()
+		lm.qt:zeroGradParameters()
+		lm.qf:zeroGradParameters()
+		lm.qst:zeroGradParameters()
+		lm.tas:zeroGradParameters()
+		lm.fas:zeroGradParameters()
+		
+				
+		local e1 = criterion:backward(pred,gold)
+		local e2 = lm.sub:backward({sc_2,sc_1},e1)
+		local e3 = lm.qt:backward({rep1,rep2},e2[2])
+		local e4 = lm.qf:backward({rep1,rep3},e2[1])
+		
+		local e5 = lm.qst:backward(vecs[1],(e3[1]+e4[1])/2)
+		local e7 = lm.tas:backward(vecs[2],e3[2])
+		local e8 = lm.fas:backward(vecs[3],e4[2])
+		
+		lm.sub:updateParameters(learningRate)
+		lm.qt:updateParameters(learningRate)
+		lm.qf:updateParameters(learningRate)
+		lm.qst:updateParameters(learningRate)
+		lm.tas:updateParameters(learningRate)
+		lm.fas:updateParameters(learningRate)
+		
 	end
 end
 ------------------------------------------------------------------------
@@ -217,6 +212,7 @@ function evaluate(name)
 	if(test_set == nil) then
 		print('测试集载入为空！') return 
 	end
+	
 	local lm = cfg.lm	--语言模型
 	local results = {}
 	print('test process:')
@@ -225,7 +221,6 @@ function evaluate(name)
 		local gold = v[1]	--正确答案的集合
 		local qst = v[2]	--问题
 		local candidates = v[3] --候选的答案
-		
 		local qidx = get_index(qst)
 		if cfg.gpu then qidx = qidx:cuda() end
 		local qemd = lm.emd:forward(qidx):clone()
@@ -241,7 +236,7 @@ function evaluate(name)
 			gold_sc[k] = score
 			gold_rank[k] = 1	--初始化排名
 		end
-		thr = 20
+		thr = 2
 		for k,c in pairs(candidates) do 
 			thr = thr -1
 			if thr ==0 then break end
