@@ -160,7 +160,7 @@ function train()
 				local vecs={}
 				for k =1,#sample do
 					sent_index[k] = get_index(sample[k]):clone()
-					if(cfg.gpu) then sent_index[k] = index:cuda() end
+					if(cfg.gpu) then sent_index[k] = sent_index[k]:cuda() end
 					vecs[k] = lm.emd:forward(sent_index[k]):clone()
 				end
 				
@@ -203,6 +203,7 @@ function train()
 			return loss,grad_params		
 		end
 		optim.adagrad(feval,params,optim_state)
+		if i%100 == 0 then collectgarbage() end
 		--lm.emd:updateParameters(0.05)
 	end
 end
@@ -276,7 +277,7 @@ function evaluate(name)
 			end
 			mrr = mrr + 1.0/c
 		end
-		results[i] = {mrr,1.0}
+		results[i] = {mrr,mark}
 
 	end
 	local results = torch.Tensor(results)
