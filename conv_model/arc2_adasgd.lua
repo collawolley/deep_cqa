@@ -10,7 +10,7 @@ cfg.dict = nil
 cfg.emd = nil
 cfg.dim = deep_cqa.config.emd_dim
 cfg.batch  = 10 or deep_cqa.config.batch_size
-cfg.gpu = false
+cfg.gpu = true
 deep_cqa.ins_meth.load_binary()	--保险数据集，这里载入是为了获得测试集和答案
 -----------------------
 function get_index(sent)
@@ -143,7 +143,7 @@ function train()
 	end
 	local batch_size = cfg.batch
 	local optim_state = {learningRate = 0.05,learningRateDecay = 0.02 }
-	train_set.size =2000
+	--train_set.size =2000
 	
 	for i= 1,train_set.size,batch_size do
 		local size = math.min(i+batch_size-1,train_set.size)-i+1
@@ -203,7 +203,7 @@ function train()
 			return loss,grad_params		
 		end
 		optim.adagrad(feval,params,optim_state)
-		if i%100 == 0 then collectgarbage() end
+		if i%500 == 0 then collectgarbage() end
 		--lm.emd:updateParameters(0.05)
 	end
 end
@@ -278,7 +278,7 @@ function evaluate(name)
 			mrr = mrr + 1.0/c
 		end
 		results[i] = {mrr,mark}
-
+		if i%50 ==0 then collectgarbage() end
 	end
 	local results = torch.Tensor(results)
 	print(torch.sum(results,1)/results:size()[1])
@@ -286,5 +286,6 @@ end
 --getlm()
 --testlm()
 train()
+collectgarbage()
 evaluate('dev')
 
