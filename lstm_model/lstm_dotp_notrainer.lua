@@ -84,7 +84,7 @@ function train()
 		local r2 = lm.tlstm:forward(vecs[2])
 		local r3 = lm.flstm:forward(vecs[3])
 		local r4 = lm.sub:forward({r2,r3})
-		local pred = 1-lm.score:forward({r4,r1})
+		local pred = torch.Tensor({1}):cuda()-lm.score:forward({r4,r1})
 
 		criterion:forward(pred,gold)
 		
@@ -95,7 +95,7 @@ function train()
 		lm.flstm:zeroGradParameters()
 
 		local e1 = criterion:backward(pred,gold)
-		local e2 = lm.score:backward({r4,r1},e1)
+		local e2 = lm.score:backward({r4,r1},-e1)
 		local e3 = lm.sub:backward({r2,r3},e2[1])
 		local e4 = lm.qlstm:backward(vecs[1],e2[2])
 		local e5 = lm.tlstm:backward(vecs[2],e3[1])
