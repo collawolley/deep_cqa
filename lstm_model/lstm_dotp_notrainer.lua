@@ -59,7 +59,7 @@ function train()
 	local train_set = torch.load(deep_cqa.ins_meth.train)
 	local indices = torch.randperm(train_set.size)
 	local criterion = nn.MarginCriterion(0.5):cuda()
-	local gold = torch.Tensor({0.5}):cuda()
+	local gold = torch.Tensor({1}):cuda()
 	local batch_size = cfg.batch
 	local learningRate = 0.01
 --	train_set.size =20
@@ -74,9 +74,9 @@ function train()
 		end
 		if(idx %2 ==0) then
 			vecs[3],vecs[2] = vecs[2],vecs[3]
-			gold[1] = -0.5
+			gold[1] = -1
 		else
-			gold[1] = 0.5
+			gold[1] = 1
 		end
 		
 				
