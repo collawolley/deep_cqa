@@ -28,7 +28,7 @@ end
 function getlm()
 	get_index('today is')
 -------------------------------------
-	local qcov = nn.SpatialConvolution(1,1000,3,3,1,1,2,2)	--input需要是3维tensor
+	local qcov = nn.SpatialConvolution(1,1000,200,2,1,1,0,1)	--input需要是3维tensor
 	local tcov = qcov:clone()
 	local fcov = qcov:clone()
 	share_params(qcov,tcov)	-- 权重共享，但是求导的过程各自独立
@@ -114,8 +114,6 @@ function testlm()	--应用修改模型后测试模型是否按照预期执行
 	local qf = lm.qf:forward({q,f})
 	local sub = lm.sub:forward({qf,qt})
 	print(qt,qf,sub)
-
-
 end
 
 cfg.lm = getlm()
@@ -143,7 +141,7 @@ function train()
 	end
 	local batch_size = cfg.batch
 	local optim_state = {learningRate = 0.05,learningRateDecay = 0.02 }
-	train_set.size =5000
+	--train_set.size =5000
 	
 	for i= 1,train_set.size,batch_size do
 		local size = math.min(i+batch_size-1,train_set.size)-i+1
@@ -234,7 +232,7 @@ function evaluate(name)
 	for i,v in pairs(test_set) do
 		--test_count = test_count -1
 		--if test_count ==0 then break end
-		xlua.progress(i,100)
+		xlua.progress(i,1000)
 
 		local golden = v[1]	--正确答案的集合
 		local qst = v[2]	--问题
@@ -279,7 +277,7 @@ function evaluate(name)
 		end
 		results[i] = {mrr,mark}
 		if i%50 ==0 then collectgarbage() end
-		if i>99 then break end
+		if i>999 then break end
 	end
 	local results = torch.Tensor(results)
 	print(torch.sum(results,1)/results:size()[1])
