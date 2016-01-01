@@ -10,7 +10,7 @@ cfg.dict = nil
 cfg.emd = nil
 cfg.dim = deep_cqa.config.emd_dim
 cfg.batch  = 10 or deep_cqa.config.batch_size
-cfg.gpu = false
+cfg.gpu = true
 deep_cqa.ins_meth.load_binary()	--保险数据集，这里载入是为了获得测试集和答案
 -----------------------
 function get_index(sent)
@@ -28,7 +28,7 @@ end
 function getlm()
 	get_index('today is')
 -------------------------------------
-	local qcov = nn.SpatialConvolution(1,2000,3,3,1,1,2,2)	--input需要是3维tensor
+	local qcov = nn.SpatialConvolution(1,1000,600,2)	--input需要是3维tensor
 	local tcov = qcov:clone()
 	local fcov = qcov:clone()
 	share_params(qcov,tcov)
@@ -36,10 +36,10 @@ function getlm()
 -------------------------------------
 	local pt = nn.Sequential()
 	pt:add(nn.SpatialAdaptiveMaxPooling(1,1))
-	pt:add(nn.Reshape(2000))
+	pt:add(nn.Reshape(1000))
 	pt:add(nn.Tanh())
 -------------------------------------
-	local hlq = nn.Linear(cfg.dim,200)
+	local hlq = nn.Linear(cfg.dim,600)
 	local hlt = hlq:clone()
 	local hlf = hlq:clone()
 	share_params(hlq,hlt)
@@ -68,7 +68,7 @@ function getlm()
 	lm.tas:add(pt:clone())
 	lm.fas:add(pt:clone())
 	----------------------
-	lm.qt = nn.CosineDistance()
+	lm.qt = nn.CosineDistance()	--nn包里的cosine distance实际上计算方式为wiki的cosine similarity
 	lm.qf = nn.CosineDistance()
 	lm.sub = nn.PairwiseDistance(1)
 -------------------------------
@@ -88,7 +88,7 @@ end
 function testlm()	--应用修改模型后测试模型是否按照预期执行
 	local lm = getlm()
 	local criterion = nn.MarginCriterion(1)
-	local gold = torch.Tensor({0.5})
+	local gold = torch.Tensor({1})
 	
 	local index1 = get_index('today is a good day'):clone()
 	local index2 = get_index('today is a very good day'):clone()
@@ -104,8 +104,6 @@ function testlm()	--应用修改模型后测试模型是否按照预期执行
 	local vec2 = lm.emd:forward(index2):clone()
 	local vec3 = lm.emd:forward(index3):clone()
 	
---	local trans = nn.Transpose({1,2})
---print(trans:forward(vec1):size())
 	local hl = nn.Linear(cfg.dim,200)
 	local q =  lm.qst:forward(vec1)
 	local t =  lm.tas:forward(vec2)
@@ -114,10 +112,8 @@ function testlm()	--应用修改模型后测试模型是否按照预期执行
 	local qf = lm.qf:forward({q,f})
 	local sub = lm.sub:forward({qf,qt})
 	print(qt,qf,sub)
-
-
 end
-
+--------------------------
 cfg.lm = getlm()
 -------------------------
 function train()
@@ -135,15 +131,15 @@ function train()
 
 	local train_set = torch.load(deep_cqa.ins_meth.train)
 	local indices = torch.randperm(train_set.size)
-	local criterion = nn.MarginCriterion(0.5)
-	local gold = torch.Tensor({0.5})
+	local criterion = nn.MarginCriterion(0.009)
+	local gold = torch.Tensor({1})
 	if cfg.gpu then
 		criterion:cuda()
 		gold = gold:cuda()
 	end
 	local batch_size = cfg.batch
 	local learningRate = 0.01
-	--train_set.size =40
+--	train_set.size =4000
 	for i= 1,train_set.size do
 		xlua.progress(i,train_set.size)
 		local idx = indices[i]
@@ -154,6 +150,15 @@ function train()
 			if(cfg.gpu) then index = index:cuda() end
 			vecs[k] = lm.emd:forward(index):clone()
 		end
+		if i %2 == 0 then 
+		--	print(vecs[2][1][1],vecs[3][1][1])
+			vecs[2],vecs[3] = vecs[3],vecs[2]
+		--	print(vecs[2][1][1],vecs[3][1][1])
+		--	print('--------------------------------------')
+			gold[1] = -1
+		else
+			gold[1] = 1
+		end
 		
 		local rep1 = lm.qst:forward(vecs[1])
 		local rep2 = lm.tas:forward(vecs[2])
@@ -161,7 +166,7 @@ function train()
 				
 		local sc_1 = lm.qt:forward({rep1,rep2})
 		local sc_2 = lm.qf:forward({rep1,rep3})
-		local pred = lm.sub:forward({sc_2,sc_1})	-- 因为是距离参数转换为相似度参数，所以是负样本减正样本
+		local pred = lm.sub:forward({sc_1,sc_2})	-- 因为是距离参数转换为相似度参数，所以是负样本减正样本
 				
 		criterion:forward(pred,gold)
 
@@ -174,9 +179,9 @@ function train()
 		
 				
 		local e1 = criterion:backward(pred,gold)
-		local e2 = lm.sub:backward({sc_2,sc_1},e1)
-		local e3 = lm.qt:backward({rep1,rep2},e2[2])
-		local e4 = lm.qf:backward({rep1,rep3},e2[1])
+		local e2 = lm.sub:backward({sc_1,sc_2},e1)
+		local e3 = lm.qt:backward({rep1,rep2},e2[1])
+		local e4 = lm.qf:backward({rep1,rep3},e2[2])
 		
 		local e5 = lm.qst:backward(vecs[1],(e3[1]+e4[1])/2)
 		local e7 = lm.tas:backward(vecs[2],e3[2])
@@ -202,7 +207,7 @@ function test_one_pair(qst,ans)
 	local aemd = lm.emd:forward(aidx):clone()
 	local arep = lm.tas:forward(aemd)
 	local sim_sc = lm.qt:forward({qst,arep})
-	return 1 - sim_sc[1]
+	return sim_sc[1]
 --]
 end
 function evaluate(name)
@@ -236,10 +241,10 @@ function evaluate(name)
 			gold_sc[k] = score
 			gold_rank[k] = 1	--初始化排名
 		end
-		thr = 2
+	--	thr = 20
 		for k,c in pairs(candidates) do 
-			thr = thr -1
-			if thr ==0 then break end
+	--		thr = thr -1
+	--		if thr ==0 then break end
 			c =tostring(tonumber(c))
 			local score = test_one_pair(qvec,answer_set[c])
 			for m,n in pairs(gold_sc) do
@@ -249,20 +254,17 @@ function evaluate(name)
 			end
 		end
 		
-		local mark =false
+		local mark =0.0
 		local mrr = 0
 		for k,c in pairs(gold_rank) do
 			if c==1 then 
-				mark = true
+				mark = 1.0
 			end
 			mrr = mrr + 1.0/c
 		end
-		if mark then 
-			results[i] = {mrr,1.0}
-		else
-			results[i] = {mrr,0.0}
-		end
+		results[i] = {mrr,mark}
 
+	--	if i >99 then break end
 	end
 	local results = torch.Tensor(results)
 	print(torch.sum(results,1)/results:size()[1])
