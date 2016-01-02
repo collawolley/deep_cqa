@@ -9,7 +9,7 @@ cfg.vecs = nil
 cfg.dict = nil
 cfg.emd = nil
 cfg.dim = deep_cqa.config.emd_dim
-cfg.batch  = 10 or deep_cqa.config.batch_size
+cfg.batch  = 5-- or deep_cqa.config.batch_size
 cfg.gpu = true
 deep_cqa.ins_meth.load_binary()	--保险数据集，这里载入是为了获得测试集和答案
 -----------------------
@@ -28,7 +28,7 @@ end
 function getlm()
 	get_index('today is')
 -------------------------------------
-	local qcov = nn.SpatialConvolution(1,1000,600,2)	--input需要是3维tensor
+	local qcov = nn.SpatialConvolution(1,1000,200,2)	--input需要是3维tensor
 	local tcov = qcov:clone()
 	local fcov = qcov:clone()
 	share_params(qcov,tcov)
@@ -39,7 +39,7 @@ function getlm()
 	pt:add(nn.Reshape(1000))
 	pt:add(nn.Tanh())
 -------------------------------------
-	local hlq = nn.Linear(cfg.dim,600)
+	local hlq = nn.Linear(cfg.dim,200)
 	local hlt = hlq:clone()
 	local hlf = hlq:clone()
 	share_params(hlq,hlt)
@@ -139,7 +139,7 @@ function train()
 	end
 	local batch_size = cfg.batch
 	local learningRate = 0.01
---	train_set.size =4000
+	train_set.size =5000
 	for i= 1,train_set.size do
 		xlua.progress(i,train_set.size)
 		local idx = indices[i]
@@ -151,10 +151,7 @@ function train()
 			vecs[k] = lm.emd:forward(index):clone()
 		end
 		if i %2 == 0 then 
-		--	print(vecs[2][1][1],vecs[3][1][1])
 			vecs[2],vecs[3] = vecs[3],vecs[2]
-		--	print(vecs[2][1][1],vecs[3][1][1])
-		--	print('--------------------------------------')
 			gold[1] = -1
 		else
 			gold[1] = 1
@@ -193,6 +190,15 @@ function train()
 		lm.qst:updateParameters(learningRate)
 		lm.tas:updateParameters(learningRate)
 		lm.fas:updateParameters(learningRate)
+--[[	
+		lm.emd:backward(vecs[1],e5)
+		lm.emd:updateParameters(learningRate)
+		lm.emd:backward(vecs[2],e7)
+		lm.emd:updateParameters(learningRate)
+		lm.emd:backward(vecs[3],e8)
+		lm.emd:updateParameters(learningRate)
+--]]
+
 		
 	end
 end
@@ -241,10 +247,7 @@ function evaluate(name)
 			gold_sc[k] = score
 			gold_rank[k] = 1	--初始化排名
 		end
-	--	thr = 20
 		for k,c in pairs(candidates) do 
-	--		thr = thr -1
-	--		if thr ==0 then break end
 			c =tostring(tonumber(c))
 			local score = test_one_pair(qvec,answer_set[c])
 			for m,n in pairs(gold_sc) do
@@ -264,7 +267,7 @@ function evaluate(name)
 		end
 		results[i] = {mrr,mark}
 
-	--	if i >99 then break end
+	if i >99 then break end
 	end
 	local results = torch.Tensor(results)
 	print(torch.sum(results,1)/results:size()[1])

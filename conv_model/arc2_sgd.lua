@@ -9,7 +9,7 @@ cfg.vecs = nil
 cfg.dict = nil
 cfg.emd = nil
 cfg.dim = deep_cqa.config.emd_dim
-cfg.batch  = 10 or deep_cqa.config.batch_size
+cfg.batch  = 5 --or deep_cqa.config.batch_size
 cfg.gpu = true
 deep_cqa.ins_meth.load_binary()	--保险数据集，这里载入是为了获得测试集和答案
 -----------------------
@@ -148,8 +148,8 @@ function train()
 		gold = gold:cuda()
 	end
 	local batch_size = cfg.batch
-	local optim_state = {learningRate = 0.01,learningRateDecay = 0.005}
-	train_set.size =5000
+	local optim_state = {learningRate = 0.01,momentum = 0.9 }
+	--train_set.size =5000
 	
 	for i= 1,train_set.size,batch_size do
 		local size = math.min(i+batch_size-1,train_set.size)-i+1
@@ -184,14 +184,14 @@ function train()
 
 				local sc_1 = lm.qt:forward({rep1,rep2})
 				local sc_2 = lm.qf:forward({rep1,rep3})
-				local pred = lm.sub:forward({sc_2,sc_1})	-- 因为是距离参数转换为相似度参数，所以是负样本减正样本
+				local pred = lm.sub:forward({sc_1,sc_2})	-- 因为是距离参数转换为相似度参数，所以是负样本减正样本
 				
 				local loss = loss + criterion:forward(pred,gold)
 				
 				local e1 = criterion:backward(pred,gold)
-				local e2 = lm.sub:backward({sc_2,sc_1},e1)
-				local e3 = lm.qt:backward({rep1,rep2},e2[2])
-				local e4 = lm.qf:backward({rep1,rep3},e2[1])
+				local e2 = lm.sub:backward({sc_1,sc_2},e1)
+				local e3 = lm.qt:backward({rep1,rep2},e2[1])
+				local e4 = lm.qf:backward({rep1,rep3},e2[2])
 				
 				local e5 = lm.qst:backward(vecs[1],(e3[1]+e4[1])/2)
 				local e7 = lm.tas:backward(vecs[2],e3[2])
@@ -208,7 +208,7 @@ function train()
 			loss = loss + 1e-4*params:norm()^2
 			return loss,grad_params		
 		end
-		optim.adagrad(feval,params,optim_state)
+		optim.sgd(feval,params,optim_state)
 		if i%500 == 0 then collectgarbage() end
 		--lm.emd:updateParameters(0.05)
 	end
@@ -258,11 +258,7 @@ function evaluate(name)
 			golden_sc[k] = score
 			golden_rank[k] = 1	--初始化排名
 		end
-		thr = 20	--500个样本只测前thr个
 		for k,c in pairs(candidates) do 
-			thr = thr -1
-			if thr ==0 then break end
-
 			c =tostring(tonumber(c))
 			local score = test_one_pair(qst_vec,answer_set[c])
 			for m,n in pairs(golden_sc) do
@@ -282,7 +278,7 @@ function evaluate(name)
 		end
 		results[i] = {mrr,mark}
 		if i%50 ==0 then collectgarbage() end
-		if i>999 then break end
+	--	if i>99 then break end
 	end
 	local results = torch.Tensor(results)
 	print(torch.sum(results,1)/results:size()[1])
