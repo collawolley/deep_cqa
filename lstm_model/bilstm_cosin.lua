@@ -9,8 +9,9 @@ cfg.vecs = nil
 cfg.dict = nil
 cfg.emd = nil
 cfg.dim = deep_cqa.config.emd_dim
-cfg.mem = 30
-cfg.batch  = 50 or deep_cqa.config.batch_size
+cfg.mem = 50
+cfg.batch  = 1 --or deep_cqa.config.batch_size
+cfg.gpu = false
 deep_cqa.ins_meth.load_binary()
 -- deep_cqa.ins_meth.load_binary()	--保险数据集，这里载入是为了获得测试集和答案
 -----------------------
@@ -62,48 +63,57 @@ function getlm()
 
 	local cov = nn.Sequential()
 	cov:add(nn.Replicate(1))	--增加维度的功能，好不容易才发现
-	cov:add(nn.SpatialConvolution(1,200,3,3,1,1,2,2))	--input需要是3维tensor
+	cov:add(nn.SpatialConvolution(1,200,3,3))	--input需要是3维tensor
 	cov:add(nn.SpatialAdaptiveMaxPooling(1,1))
 	cov:add(nn.Reshape(200))
 	cov:add(nn.Tanh())
 	
 	local mlp = nn.Sequential()	--一个简单的感知机
-	mlp:add(nn.Linear(200,3))
+	mlp:add(nn.Linear(200,10))
 	mlp:add(nn.Tanh())
-	mlp:add(nn.Linear(3,1))
+	mlp:add(nn.Linear(10,1))
 	mlp:add(nn.SoftSign())	--输出为归一化后的评分
 -------------------------------------
 	local lm = {}	--待返回的语言模型
-	lm.emd = cfg.emd:cuda()	--词嵌入部分
+	lm.emd = cfg.emd	--词嵌入部分
 -------------------------------
-	lm.qlstm = lstm:clone():cuda()	--问题部分的bilstm模型
-	lm.tlstm = lstm:clone():cuda()	--两种答案的bilstm模型
-	lm.flstm = lstm:clone():cuda()
+	lm.qlstm = lstm:clone()	--问题部分的bilstm模型
+	lm.tlstm = lstm:clone()	--两种答案的bilstm模型
+	lm.flstm = lstm:clone()
 	share_params(lm.tlstm,lm.flstm)
 -------------------------------
-	lm.tq_cos = cosine:clone():cuda()	--这个模型内部没有参数，所以无需共享也是相同的
-	lm.fq_cos = cosine:clone():cuda() 
+	lm.tq_cos = cosine:clone()	--这个模型内部没有参数，所以无需共享也是相同的
+	lm.fq_cos = cosine:clone() 
 	
-	lm.tq_cov = cov:clone():cuda()	--卷积模型+全图最大值pooling
-	lm.fq_cov = cov:clone():cuda()
+	lm.tq_cov = cov:clone()	--卷积模型+全图最大值pooling
+	lm.fq_cov = cov:clone()
 	share_params(lm.tq_cov,lm.fq_cov)
 
-	lm.tq_mlp = mlp:clone():cuda()	--两个模型的多层感知机层
-	lm.fq_mlp = mlp:clone():cuda()
+	lm.tq_mlp = mlp:clone()	--两个模型的多层感知机层
+	lm.fq_mlp = mlp:clone()
 	share_params(lm.tq_mlp,lm.fq_mlp)
 	
-	lm.tq = nn.Sequential():add(lm.tq_cos):add(lm.tq_cov):add(lm.tq_mlp):cuda()
-	lm.fq = nn.Sequential():add(lm.fq_cos):add(lm.fq_cov):add(lm.fq_mlp):cuda()
+	lm.tq = nn.Sequential():add(lm.tq_cos):add(lm.tq_cov):add(lm.tq_mlp)
+	lm.fq = nn.Sequential():add(lm.fq_cos):add(lm.fq_cov):add(lm.fq_mlp)
 --------------------------------
-	lm.sub = nn.PairwiseDistance(1):cuda()
+	lm.sub = nn.PairwiseDistance(1)
+	if cfg.gpu then
+		lm.emd:cuda()
+		lm.qlstm:cuda()
+		lm.tlstm:cuda()
+		lm.flstm:cuda()
+		lm.tq:cuda()
+		lm.tf:cuda()
+		lm.sub:cuda()		
+	end
 
 	return lm
 
 end
 function testlm()	--应用修改模型后测试模型是否按照预期执行
 	local lm = getlm()
-	local criterion = nn.MarginCriterion(1):cuda()
-	local gold = torch.Tensor({0.5}):cuda()
+	local criterion = nn.MarginCriterion(0.09):cuda()
+	local gold = torch.Tensor({1}):cuda()
 
 	local index1 = get_index('today is a good day'):clone()
 	local index2 = get_index('today is a very good day'):clone()
@@ -158,11 +168,15 @@ function train()
 
 	local train_set = torch.load(deep_cqa.ins_meth.train)
 	local indices = torch.randperm(train_set.size)
-	local criterion = nn.MarginCriterion(1):cuda()
-	local gold = torch.Tensor({0.5}):cuda()
+	local criterion = nn.MarginCriterion(0.009)
+	local gold = torch.Tensor({1})
+	if cfg.gpu then
+		criterion:cuda()
+		gold = gold:cuda()
+	end
 	local batch_size = cfg.batch
-	local optim_state = {learningRate = 0.05 }
-	--train_set.size =4000
+	local optim_state = {learningRate = 0.01 }
+	train_set.size =100
 	for i= 1,train_set.size,batch_size do
 		local size = math.min(i+batch_size-1,train_set.size)-i+1
 		local feval = function(x)
@@ -174,15 +188,18 @@ function train()
 				local sample = train_set[idx]
 				local vecs={}
 				for k =1,#sample do
-					local index = get_index(sample[k]):clone():cuda()
+					local index = get_index(sample[k]):clone()
+					if cfg.gpu then
+						index = index:cuda()
+					end
 					vecs[k] = lm.emd:forward(index):clone()
 				end
 				
 				if(idx %2 ==0) then
 					vecs[3],vecs[2] = vecs[2],vecs[3]
-					gold[1] = -0.5
+					gold[1] = -1
 				else
-					gold[1] = 0.5
+					gold[1] = 1
 				end
 
 				local rep1 = lm.qlstm:forward(vecs[1])
@@ -219,6 +236,9 @@ function test_one_pair(qst,ans)
 --[
 	local lm = cfg.lm
 	local aidx = get_index(ans):cuda()
+	if cfg.gpu then
+		aidx = aidx:cuda()
+	end
 	local aemd = lm.emd:forward(aidx):clone()
 	local alstm = lm.tlstm:forward(aemd)
 	local sim_sc = lm.tq:forward({qst,alstm})
@@ -242,6 +262,9 @@ function evaluate(name)
 		local candidates = v[3] --候选的答案
 		
 		local qidx = get_index(qst):cuda()
+		if cfg.gpu then
+			qidx =qidx:cuda()
+		end
 		local qemd = lm.emd:forward(qidx):clone()
 		local qvec = lm.qlstm:forward(qemd)
 		
@@ -282,6 +305,7 @@ function evaluate(name)
 		else
 			results[i] = {mrr,0.0}
 		end
+	if i>99 then break end
 
 	end
 	local results = torch.Tensor(results)
