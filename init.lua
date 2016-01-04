@@ -53,15 +53,17 @@ config.insurance.test2 = config.parent_path .. 'data/insurance_qa/' .. 'test2.tx
 config.insurance.answer = config.parent_path .. 'data/insurance_qa/' .. 'answer.txt'
 config.insurance.dict = config.parent_path .. 'data/insurance_qa/' .. 'dict.txt'
 config.insurance.binary = config.parent_path .. 'data/insurance_qa/' .. 'full_dataset.bin'
-config.insurance.negative_size = 1
+config.insurance.negative_size = 50
 -------------
 config.batch_size = 5
 config.random_seed =134
-
+config.stop_words = 'data/context/stop_words.tab'
+config.co_matrix = 'data/context/co_matrix.tab'
+-------------------------
 deep_cqa.config = config
 deep_cqa.insurance = {}
 deep_cqa.ins_meth ={}
-deep_cqa.ins_meth.train = config.parent_path .. 'data/insurance_qa/' .. 'train_1.bin'
+deep_cqa.ins_meth.train = config.parent_path .. 'data/insurance_qa/' .. 'train_50.bin'
 deep_cqa.ins_meth.validation = config.parent_path .. 'data/insurance_qa/' .. 'train_10.bin'
 deep_cqa.ins_meth.test = config.parent_path .. 'data/insurance_qa/' .. 'train_10.bin'
 -------------------------------
@@ -69,6 +71,11 @@ include('util/vocab.lua')
 include('util/emd.lua')
 include('util/read_data.lua')
 include('simple_model/avg_emd.lua')
+
+
+--deep_cqa.ins_meth.load_txt_dataset()
+--deep_cqa.ins_meth.save_binary()
+
 --deep_cqa.ins_meth.load_binary()
 --deep_cqa.ins_meth.generate_train_set()
 

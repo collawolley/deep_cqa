@@ -33,13 +33,13 @@ function getlm()
 	local hlt = hlq:clone('weight','bias')
 	local hlf = hlq:clone('weight','bias')
 -------------------------------------
-	local qcov = nn.SpatialConvolution(1,1000,200,2)	--input需要是3维tensor
+	local qcov = nn.SpatialConvolution(1,4000,200,2)	--input需要是3维tensor
 	local tcov = qcov:clone('weight','bias')
 	local fcov = qcov:clone('weight','bias')
 -------------------------------------
 	local pt = nn.Sequential()
 	pt:add(nn.SpatialAdaptiveMaxPooling(1,1))
-	pt:add(nn.Reshape(1000))
+	pt:add(nn.Reshape(4000))
 	pt:add(nn.Tanh())
 -------------------------------------
 	local lm = {}	--待返回的语言模型

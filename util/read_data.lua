@@ -12,7 +12,7 @@ function deep_cqa.read_sentences(path,vocab)
 		if line == nil then 
 			break 
 		end
-
+		line = string.gsub(line,'\r','')
 		local tokens = stringx.split(line)
 		local len = #tokens
 		local sent = torch.IntTensor(len)
@@ -49,6 +49,8 @@ function deep_cqa.ins_meth.load_train()
 		if line == nil then
 			break
 		end
+		
+		line = string.gsub(line,'\r','')
 		local list = line:split('\t')
 		table.insert(train_set,{list[1],list[2]:split(' ')})
 	end
@@ -66,6 +68,7 @@ function deep_cqa.ins_meth.load_answer()
 		if line == nil then
 			break
 		end
+		line = string.gsub(line,'\r','')
 		local list = line:split('\t')
 		answer_set[list[1]] = list[2]
 	end
@@ -97,6 +100,7 @@ function deep_cqa.ins_meth.load_test(name)
 		if line == nil then
 			break
 		end
+		line = string.gsub(line,'\r','')
 		local list = line:split('\t')
 		table.insert(test_set,{list[1]:split(' '),list[2],list[3]:split(' ')})
 	end
@@ -106,7 +110,7 @@ end
 ---------------------------------------
 --载入保险数据的整体执行函数
 function deep_cqa.ins_meth.load_txt_dataset()
-	deep_cqa.ins_meth.load_train()
+    deep_cqa.ins_meth.load_train()
 	deep_cqa.ins_meth.load_answer()
 	deep_cqa.ins_meth.load_test('dev')
 	deep_cqa.ins_meth.load_test('test1')

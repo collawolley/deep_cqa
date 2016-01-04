@@ -28,7 +28,7 @@ end
 function getlm()
 	get_index('today is')
 -------------------------------------
-	local qcov = nn.SpatialConvolution(1,1000,200,2)	--input需要是3维tensor
+	local qcov = nn.SpatialConvolution(1,4000,200,2)	--input需要是3维tensor
 	local tcov = qcov:clone()
 	local fcov = qcov:clone()
 	share_params(qcov,tcov)
@@ -36,7 +36,7 @@ function getlm()
 -------------------------------------
 	local pt = nn.Sequential()
 	pt:add(nn.SpatialAdaptiveMaxPooling(1,1))
-	pt:add(nn.Reshape(1000))
+	pt:add(nn.Reshape(4000))
 	pt:add(nn.Tanh())
 -------------------------------------
 	local hlq = nn.Linear(cfg.dim,200)
@@ -139,7 +139,7 @@ function train()
 	end
 	local batch_size = cfg.batch
 	local learningRate = 0.01
-	train_set.size =5000
+--	train_set.size =5000
 	for i= 1,train_set.size do
 		xlua.progress(i,train_set.size)
 		local idx = indices[i]
@@ -267,7 +267,7 @@ function evaluate(name)
 		end
 		results[i] = {mrr,mark}
 
-	if i >99 then break end
+--	if i >99 then break end
 	end
 	local results = torch.Tensor(results)
 	print(torch.sum(results,1)/results:size()[1])

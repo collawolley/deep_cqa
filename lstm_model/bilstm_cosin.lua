@@ -11,9 +11,8 @@ cfg.emd = nil
 cfg.dim = deep_cqa.config.emd_dim
 cfg.mem = 50
 cfg.batch  = 1 --or deep_cqa.config.batch_size
-cfg.gpu = false
-deep_cqa.ins_meth.load_binary()
--- deep_cqa.ins_meth.load_binary()	--保险数据集，这里载入是为了获得测试集和答案
+cfg.gpu = true
+deep_cqa.ins_meth.load_binary()	--保险数据集，这里载入是为了获得测试集和答案
 -----------------------
 function get_index(sent)
 	--	获取一个句子的索引表达，作为整个模型的输入，可以直接应用到词向量层
@@ -103,7 +102,7 @@ function getlm()
 		lm.tlstm:cuda()
 		lm.flstm:cuda()
 		lm.tq:cuda()
-		lm.tf:cuda()
+		lm.tq:cuda()
 		lm.sub:cuda()		
 	end
 
