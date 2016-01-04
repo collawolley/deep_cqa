@@ -114,4 +114,4 @@ function co_matrix()
 	torch.save(deep_cqa.config.co_matrix,co,'binary')
 end
 --get_stopwords()
-co_matrix()
+--co_matrix()

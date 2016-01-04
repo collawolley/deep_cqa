@@ -5,8 +5,6 @@
 	共现矩阵（从训练集中提取得来）
 	idf统计结果
 --]]
-do
-require('..')
 local CoSim = torch.class('CoSim')
 function CoSim:__init()		
 	-- 初始化，载入截止词和共现矩阵
@@ -40,9 +38,11 @@ function CoSim:get_score(question, answer)
 	for i,v in pairs(score) do 
 		value = value + v
 	end
+	value = value/#score
 	return value
 end
-end
+--[[
 tmp = CoSim()
 sc = tmp:get_score('today is a good day','tomorrw is a good day too')
 print(sc)
+--]]
