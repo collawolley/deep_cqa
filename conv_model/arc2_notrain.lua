@@ -28,26 +28,28 @@ end
 function getlm()
 	get_index('today is')
 -------------------------------------
-	local qcov = nn.SpatialConvolution(1,4000,200,2)	--input需要是3维tensor
-	local tcov = qcov:clone()
-	local fcov = qcov:clone()
-	share_params(qcov,tcov)
-	share_params(qcov,fcov)
+	local qcov = nn.SpatialConvolution(1,1000,200,2,1,1,0,1)	--input需要是3维tensor
+	local tcov = qcov:clone('weights','bias')
+	local fcov = qcov:clone('weights','bias')
+	--share_params(qcov,tcov)
+	--share_params(qcov,fcov)
 -------------------------------------
 	local pt = nn.Sequential()
 	pt:add(nn.SpatialAdaptiveMaxPooling(1,1))
-	pt:add(nn.Reshape(4000))
+	pt:add(nn.Reshape(1000))
 	pt:add(nn.Tanh())
 -------------------------------------
 	local hlq = nn.Linear(cfg.dim,200)
-	local hlt = hlq:clone()
-	local hlf = hlq:clone()
-	share_params(hlq,hlt)
-	share_params(hlq,hlf)
+	local hlt = hlq:clone('weights','bias')
+	local hlf = hlq:clone('weights','bias')
+	--share_params(hlq,hlt)
+	--share_params(hlq,hlf)
 
 -------------------------------------
 	local lm = {}	--待返回的语言模型
-	lm.emd = cfg.emd	--词嵌入部分
+	lm.qemd = cfg.emd	--词嵌入部分
+	lm.temd = lm.qemd:clone('weights','bias')
+	lm.femd = lm.qemd:clone('weights','bias')
 	lm.qst = nn.Sequential()
 	lm.tas = nn.Sequential()
 	lm.fas = nn.Sequential()
@@ -73,7 +75,9 @@ function getlm()
 	lm.sub = nn.PairwiseDistance(1)
 -------------------------------
 	if cfg.gpu then
-		lm.emd:cuda()
+		lm.qemd:cuda()
+		lm.temd:cuda()
+		lm.femd:cuda()
 		lm.qst:cuda()
 		lm.tas:cuda()
 		lm.fas:cuda()
@@ -120,7 +124,9 @@ function train()
 	local lm = cfg.lm
 	
 	local modules = nn.Parallel()
-	modules:add(lm.emd)
+	--modules:add(lm.qemd)
+	--modules:add(lm.temd)
+	--modules:add(lm.femd)
 	modules:add(lm.qst)
 	modules:add(lm.tas)
 	modules:add(lm.fas)
@@ -144,12 +150,21 @@ function train()
 		xlua.progress(i,train_set.size)
 		local idx = indices[i]
 		local sample = train_set[idx]
+--		print('\n',sample)
 		local vecs={}
-		for k =1,#sample do
-			local index = get_index(sample[k]):clone()
-			if(cfg.gpu) then index = index:cuda() end
-			vecs[k] = lm.emd:forward(index):clone()
+		
+		local indexq = get_index(sample[1]):clone()
+		local indext = get_index(sample[2]):clone()
+		local indexf = get_index(sample[3]):clone()
+		if(cfg.gpu) then
+			 indexq = indexq:cuda() 
+			 indext = indext:cuda() 
+			 indexf = indexf:cuda() 
 		end
+		vecs[1] = lm.qemd:forward(indexq):clone()
+		vecs[2] = lm.temd:forward(indext):clone()
+		vecs[3] = lm.femd:forward(indexf):clone()
+		
 		if i %2 == 0 then 
 			vecs[2],vecs[3] = vecs[3],vecs[2]
 			gold[1] = -1
@@ -173,33 +188,37 @@ function train()
 		lm.qst:zeroGradParameters()
 		lm.tas:zeroGradParameters()
 		lm.fas:zeroGradParameters()
-		
-				
+		lm.qemd:zeroGradParameters()
+		lm.temd:zeroGradParameters()
+		lm.femd:zeroGradParameters()
+--		print('forward done')
+					
 		local e1 = criterion:backward(pred,gold)
 		local e2 = lm.sub:backward({sc_1,sc_2},e1)
 		local e3 = lm.qt:backward({rep1,rep2},e2[1])
 		local e4 = lm.qf:backward({rep1,rep3},e2[2])
 		
-		local e5 = lm.qst:backward(vecs[1],(e3[1]+e4[1])/2)
+		local e5 = lm.qst:backward(vecs[1],(e3[1]+e4[1]))
 		local e7 = lm.tas:backward(vecs[2],e3[2])
 		local e8 = lm.fas:backward(vecs[3],e4[2])
-		
+--		print('准备更新参数')	
 		lm.sub:updateParameters(learningRate)
 		lm.qt:updateParameters(learningRate)
 		lm.qf:updateParameters(learningRate)
 		lm.qst:updateParameters(learningRate)
 		lm.tas:updateParameters(learningRate)
 		lm.fas:updateParameters(learningRate)
---[[	
-		lm.emd:backward(vecs[1],e5)
-		lm.emd:updateParameters(learningRate)
-		lm.emd:backward(vecs[2],e7)
-		lm.emd:updateParameters(learningRate)
-		lm.emd:backward(vecs[3],e8)
-		lm.emd:updateParameters(learningRate)
---]]
-
-		
+--[	
+--		print('q',#indexq)
+		lm.qemd:backward(indexq,e5)
+		lm.qemd:updateParameters(learningRate)
+--		print('t',#indext)
+		lm.temd:backward(indext,e7)
+		lm.temd:updateParameters(learningRate)
+--		print('f',#indexf)
+		lm.femd:backward(indexf,e8)
+		lm.femd:updateParameters(learningRate)
+--]
 	end
 end
 ------------------------------------------------------------------------
@@ -210,7 +229,7 @@ function test_one_pair(qst,ans)
 	local lm = cfg.lm
 	local aidx = get_index(ans)
 	if cfg.gpu then aidx = aidx:cuda() end
-	local aemd = lm.emd:forward(aidx):clone()
+	local aemd = lm.temd:forward(aidx):clone()
 	local arep = lm.tas:forward(aemd)
 	local sim_sc = lm.qt:forward({qst,arep})
 	return sim_sc[1]
@@ -234,7 +253,7 @@ function evaluate(name)
 		local candidates = v[3] --候选的答案
 		local qidx = get_index(qst)
 		if cfg.gpu then qidx = qidx:cuda() end
-		local qemd = lm.emd:forward(qidx):clone()
+		local qemd = lm.qemd:forward(qidx):clone()
 		local qvec = lm.qst:forward(qemd)
 		
 		local sc = {}	

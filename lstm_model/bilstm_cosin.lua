@@ -62,7 +62,7 @@ function getlm()
 
 	local cov = nn.Sequential()
 	cov:add(nn.Replicate(1))	--增加维度的功能，好不容易才发现
-	cov:add(nn.SpatialConvolution(1,200,3,3))	--input需要是3维tensor
+	cov:add(nn.SpatialConvolution(1,200,3,3,1,1,2,2))	--input需要是3维tensor
 	cov:add(nn.SpatialAdaptiveMaxPooling(1,1))
 	cov:add(nn.Reshape(200))
 	cov:add(nn.Tanh())
