@@ -78,19 +78,19 @@ function getlm()
 -------------------------------
 	lm.qlstm = lstm:clone()	--问题部分的bilstm模型
 	lm.tlstm = lstm:clone()	--两种答案的bilstm模型
-	lm.flstm = lstm:clone()
-	share_params(lm.tlstm,lm.flstm)
+	lm.flstm = lm.tlstm:clone('weight','bias')
+	--share_params(lm.tlstm,lm.flstm)
 -------------------------------
 	lm.tq_cos = cosine:clone()	--这个模型内部没有参数，所以无需共享也是相同的
 	lm.fq_cos = cosine:clone() 
 	
 	lm.tq_cov = cov:clone()	--卷积模型+全图最大值pooling
-	lm.fq_cov = cov:clone()
-	share_params(lm.tq_cov,lm.fq_cov)
+	lm.fq_cov = lm.tq_cov:clone('weight','bias')
+	--share_params(lm.tq_cov,lm.fq_cov)
 
 	lm.tq_mlp = mlp:clone()	--两个模型的多层感知机层
-	lm.fq_mlp = mlp:clone()
-	share_params(lm.tq_mlp,lm.fq_mlp)
+	lm.fq_mlp = lm.tq_mlp:clone('weight','bias')
+--	share_params(lm.tq_mlp,lm.fq_mlp)
 	
 	lm.tq = nn.Sequential():add(lm.tq_cos):add(lm.tq_cov):add(lm.tq_mlp)
 	lm.fq = nn.Sequential():add(lm.fq_cos):add(lm.fq_cov):add(lm.fq_mlp)
@@ -101,22 +101,33 @@ function getlm()
 		lm.qlstm:cuda()
 		lm.tlstm:cuda()
 		lm.flstm:cuda()
+		lm.tq_cos:cuda()
+		lm.fq_cos:cuda()
+		lm.tq_cov:cuda()
+		lm.fq_cov:cuda()
+		lm.tq_mlp:cuda()
+		lm.fq_mlp:cuda()
 		lm.tq:cuda()
 		lm.tq:cuda()
 		lm.sub:cuda()		
 	end
-
 	return lm
-
 end
 function testlm()	--应用修改模型后测试模型是否按照预期执行
 	local lm = getlm()
-	local criterion = nn.MarginCriterion(0.09):cuda()
-	local gold = torch.Tensor({1}):cuda()
-
+	local criterion = nn.MarginCriterion(0.09)
+	local gold = torch.Tensor({1})
 	local index1 = get_index('today is a good day'):clone()
 	local index2 = get_index('today is a very good day'):clone()
 	local index3 = get_index('This class creates an output where the input is replicated'):clone()
+	if cfg.gpu then
+		criterion:cuda()
+		gold = gold:cuda()
+		index1= index1:cuda()
+		index2= index1:cuda()
+		index3= index1:cuda()
+	end
+
 	local vec1 = lm.emd:forward(index1):clone()
 	local vec2 = lm.emd:forward(index2):clone()
 	local vec3 = lm.emd:forward(index3):clone()
@@ -124,6 +135,9 @@ function testlm()	--应用修改模型后测试模型是否按照预期执行
 	local rep1 = lm.qlstm:forward(vec1)
 	local rep2 = lm.tlstm:forward(vec2)
 	local rep3 = lm.flstm:forward(vec3)
+	print(rep1:size())
+	print(rep2:size())
+	print(rep3:size())
 	local sc_1 = lm.tq:forward({rep1,rep2})
 	local sc_2 = lm.fq:forward({rep1,rep3})
 	local pred = lm.sub:forward({sc_1,sc_2})
@@ -132,21 +146,19 @@ function testlm()	--应用修改模型后测试模型是否按照预期执行
 	print(criterion:forward(pred,gold))
 				
 	local e1 = criterion:backward(pred,gold)
-	print('e1',e1)
+	print('e1',e1:size())
 	local e2 = lm.sub:backward({sc_1,sc_2},e1)
 	print('e2',e2)
 	local e3 = lm.tq:backward({rep1,rep2},e2[1])
 	print('e3',e3)
 	local e4 = lm.fq:backward({rep1,rep3},e2[2])
 	print('e4',e4)
---	local e5 = lm.qlstm:backward(vec1,e3[1])
---	print('e5',e5)
 	local e6 = lm.qlstm:backward(vec1,(e4[1]+e3[1])/2)
-	print('e6',e6)
+	print('e6',e6:size())
 	local e7 = lm.tlstm:backward(vec2,e3[2])
-	print('e7',e7)
+	print('e7',e7:size())
 	local e8 = lm.flstm:backward(vec3,e4[2])
-	print('e8',e8)
+	print('e8',e8:size())
 				
 
 end
@@ -156,7 +168,8 @@ cfg.lm = getlm()
 function train()
 	local lm = cfg.lm
 	
-	local modules = nn.Parallel():add(lm.emd)
+	local modules = nn.Parallel()
+	modules:add(lm.emd)
 	modules:add(lm.qlstm)
 	modules:add(lm.tlstm)
 	modules:add(lm.flstm)
@@ -175,7 +188,7 @@ function train()
 	end
 	local batch_size = cfg.batch
 	local optim_state = {learningRate = 0.01 }
-	train_set.size =100
+	--train_set.size =20
 	for i= 1,train_set.size,batch_size do
 		local size = math.min(i+batch_size-1,train_set.size)-i+1
 		local feval = function(x)
@@ -277,10 +290,10 @@ function evaluate(name)
 			gold_sc[k] = score
 			gold_rank[k] = 1	--初始化排名
 		end
-		thr = 20
+	--	thr = 20
 		for k,c in pairs(candidates) do 
-			thr = thr -1
-			if thr ==0 then break end
+	--		thr = thr -1
+	--		if thr ==0 then break end
 			c =tostring(tonumber(c))
 			local score = test_one_pair(qvec,answer_set[c])[1]
 			for m,n in pairs(gold_sc) do
@@ -290,22 +303,16 @@ function evaluate(name)
 			end
 		end
 		
-		local mark =false
+		local mark =0.0
 		local mrr = 0
 		for k,c in pairs(gold_rank) do
 			if c==1 then 
-				mark = true
+				mark = 1.0
 			end
 			mrr = mrr + 1.0/c
 		end
-		--print(mrr,i)
-		if mark then 
-			results[i] = {mrr,1.0}
-		else
-			results[i] = {mrr,0.0}
-		end
-	if i>99 then break end
-
+		results[i] = {mrr,mark}
+		if i>99 then break end
 	end
 	local results = torch.Tensor(results)
 	print(torch.sum(results,1)/results:size()[1])

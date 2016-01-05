@@ -53,17 +53,18 @@ config.insurance.test2 = config.parent_path .. 'data/insurance_qa/' .. 'test2.tx
 config.insurance.answer = config.parent_path .. 'data/insurance_qa/' .. 'answer.txt'
 config.insurance.dict = config.parent_path .. 'data/insurance_qa/' .. 'dict.txt'
 config.insurance.binary = config.parent_path .. 'data/insurance_qa/' .. 'full_dataset.bin'
-config.insurance.negative_size = 50
+config.insurance.negative_size = 1
 -------------
 config.batch_size = 5
 config.random_seed =134
 config.stop_words = 'data/context/stop_words.tab'
 config.co_matrix = 'data/context/co_matrix.tab'
+config.word_count = 'data/context/word_count.tab'
 -------------------------
 deep_cqa.config = config
 deep_cqa.insurance = {}
 deep_cqa.ins_meth ={}
-deep_cqa.ins_meth.train = config.parent_path .. 'data/insurance_qa/' .. 'train_50.bin'
+deep_cqa.ins_meth.train = config.parent_path .. 'data/insurance_qa/' .. 'train_1.bin'
 deep_cqa.ins_meth.validation = config.parent_path .. 'data/insurance_qa/' .. 'train_10.bin'
 deep_cqa.ins_meth.test = config.parent_path .. 'data/insurance_qa/' .. 'train_10.bin'
 -------------------------------

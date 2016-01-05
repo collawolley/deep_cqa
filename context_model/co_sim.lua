@@ -9,6 +9,7 @@ local CoSim = torch.class('CoSim')
 function CoSim:__init()		
 	-- 初始化，载入截止词和共现矩阵
 	self.sw = torch.load(deep_cqa.config.stop_words)
+	self.wc = torch.load(deep_cqa.config.word_count)
 	self.co_matrix = torch.load(deep_cqa.config.co_matrix,'binary')
 end
 -----------------------
@@ -24,10 +25,13 @@ function CoSim:get_score(question, answer)
 				if self.sw[qw] == nil then
 					local t = self.co_matrix[qw]
 					if t ~= nil then 
-						t = t[aw]
+						t = t[aw]				
 					end
 					if t == nil then
 						t =0
+					else
+						t=t/(self.wc[aw][1]*self.wc[qw][1])
+						--t=t/(self.wc[aw][1])
 					end
 					score[i] = score[i]+t				
 				end

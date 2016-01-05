@@ -9,28 +9,71 @@ function cmp(i,v)
 end
 function get_stopwords()
 	deep_cqa.ins_meth.load_binary()	--载入语料库
-	wc = {}
+	local wc = {}
+	local qwc = {}	--问题部分的词频统计，包括两个部分，绝对词频和出现该词的文档数量
+	local awc = {}	--同上，是针对答案部分的记录
+	local cache ={}
+	local qst_wc = 0	--问题中（train）单词个数
+	local qst_ac = 0	--问题中（train）句子个数
+	local ans_wc = 0	--答案中（train）单词个数
+	local ans_ac = 0	--答案中（train）句子个数
+
 	for i,item in pairs(deep_cqa.insurance['train']) do
+		qst_ac = qst_ac + 1
 		item[1] = string.gsub(item[1],'\r','')
 		local qst = item[1]:split(' ')
-		--print(qst)
 		for j,word in pairs(qst) do
+			qst_wc = qst_wc + 1
 			if wc[word] == nil then
 				wc[word] = 0
 			end
 			wc[word] = wc[word]+1
+			------------------------------------------
+			if cache[word] == nil then
+				cache[word] = 0
+			end
+			cache[word] = cache[word]+1
+			------------------------------------------
 		end
+		----------------------
+		for word,count in pairs(cache) do
+			if qwc[word] ==nil then 
+				qwc[word] ={0,0}
+			end
+			qwc[word][1] = qwc[word][1]+1
+			qwc[word][2] = qwc[word][2]+count
+		end
+		cache ={}
+		----------------------
 	end
 	for i,item in pairs(deep_cqa.insurance['answer']) do
+		ans_ac = ans_ac + 1
 		item = string.gsub(item,'\r','')
 		local qst = item:split(' ')
-		--print(qst)
 		for j,word in pairs(qst) do
+			ans_wc = ans_wc + 1
 			if wc[word] == nil then
 				wc[word] = 0
 			end
 			wc[word] = wc[word]+1
+			------------------------------------------
+			if cache[word] == nil then
+				cache[word] = 0
+			end
+			cache[word] = cache[word]+1
+			------------------------------------------
 		end
+		----------------------
+		for word,count in pairs(cache) do
+			if awc[word] ==nil then 
+				awc[word] ={0,0}
+			end
+			awc[word][1] = awc[word][1]+1
+			awc[word][2] = awc[word][2]+count
+		end
+		cache ={}
+		----------------------
+
 	end
 	for i,item in pairs(deep_cqa.insurance['dev']) do
 		item[2] = string.gsub(item[2],'\r','')
@@ -77,7 +120,26 @@ function get_stopwords()
 		end
 	end
 	torch.save(deep_cqa.config.stop_words,sw)
---	print(sw)
+	------------------------- 合并两个table awc,qwc
+	local aqwc ={}
+	for i,v in pairs(awc) do
+		aqwc[i] = v
+	end
+	for i,v in pairs(qwc) do
+		if aqwc[i]== nil then
+			aqwc[i] ={0,0}
+		end
+
+		aqwc[i][1] = (aqwc[i][1] + v[1])
+		aqwc[i][2] = (aqwc[i][2] + v[2])
+	end
+	for i,v in pairs(aqwc) do
+		aqwc[i][1] = aqwc[i][1]/(0.0+qst_ac+ans_ac)
+		aqwc[i][2] = aqwc[i][2]/(0.0+qst_wc+ans_wc)
+	end
+	-------------------------
+	torch.save(deep_cqa.config.word_count,aqwc)
+	print(aqwc)
 end
 -------------------------------------------------------
 function co_matrix()
@@ -113,5 +175,5 @@ function co_matrix()
 --	print(co)
 	torch.save(deep_cqa.config.co_matrix,co,'binary')
 end
---get_stopwords()
+get_stopwords()
 --co_matrix()
