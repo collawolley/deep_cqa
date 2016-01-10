@@ -44,6 +44,7 @@ function deep_cqa.ins_meth.load_train()
 	local file = io.open(ip,'r')
 	local line
 	local train_set = {}
+	train_set.size = 0
 	while true do
 		line = file:read()
 		if line == nil then
@@ -53,6 +54,7 @@ function deep_cqa.ins_meth.load_train()
 		line = string.gsub(line,'\r','')
 		local list = line:split('\t')
 		table.insert(train_set,{list[1],list[2]:split(' ')})
+		train_set.size = train_set.size + 1
 	end
 	file:close()
 	deep_cqa.insurance['train'] = train_set
@@ -63,6 +65,7 @@ function deep_cqa.ins_meth.load_answer()
 	local file = io.open(ip,'r')
 	local line
 	local answer_set = {}
+	answer_set.size = 0
 	while true do
 		line = file:read()
 		if line == nil then
@@ -71,6 +74,7 @@ function deep_cqa.ins_meth.load_answer()
 		line = string.gsub(line,'\r','')
 		local list = line:split('\t')
 		answer_set[list[1]] = list[2]
+		answer_set.size = answer_set.size + 1
 	end
 	deep_cqa.insurance['answer'] = answer_set
 	print(#answer_set)
@@ -95,6 +99,7 @@ function deep_cqa.ins_meth.load_test(name)
 	local file = io.open(ip,'r')
 	local line
 	local test_set = {}
+	test_set.size = 0
 	while true do
 		line = file:read()
 		if line == nil then
@@ -103,6 +108,7 @@ function deep_cqa.ins_meth.load_test(name)
 		line = string.gsub(line,'\r','')
 		local list = line:split('\t')
 		table.insert(test_set,{list[1]:split(' '),list[2],list[3]:split(' ')})
+		test_set.size = test_set.size + 1
 	end
 	deep_cqa.insurance[name] = test_set
 	file:close()
