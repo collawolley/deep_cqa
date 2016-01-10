@@ -130,8 +130,8 @@ function train()
 	modules:add(lm.qst)
 	modules:add(lm.tas)
 	modules:add(lm.fas)
-	modules:add(lm.tq)
-	modules:add(lm.fq)
+	modules:add(lm.qt)
+	modules:add(lm.qf)
 	modules:add(lm.sub)
 	params,grad_params = modules:getParameters()
 
@@ -144,10 +144,10 @@ function train()
 		gold = gold:cuda()
 	end
 	local batch_size = cfg.batch
-	local learningRate = 0.01
+	local learningRate = 0.1
 	--train_set.size =5000
 	for i= 1,train_set.size do
-		xlua.progress(i,train_set.size)
+		--xlua.progress(i,train_set.size)
 		local idx = indices[i]
 		local sample = train_set[idx]
 		local vecs={}
@@ -205,7 +205,7 @@ function train()
 		local e3 = lm.qt:backward({rep1,rep2},e2[1])
 		local e4 = lm.qf:backward({rep1,rep3},e2[2])
 		
-		local e5 = lm.qst:backward(vecs[1],(e3[1]+e4[1])/2)
+		local e5 = lm.qst:backward(vecs[1],(e3[1]+e4[1])/2)	--问题编码部分的误差来自两个模块
 		local e7 = lm.tas:backward(vecs[2],e3[2])
 		local e8 = lm.fas:backward(vecs[3],e4[2])
 --		print('准备更新参数')	
@@ -234,10 +234,12 @@ function test_one_pair(qst,ans)
 	--传入的qst为已经计算好的向量，ans为未经处理的句子
 --[
 	local lm = cfg.lm
-	local aidx = get_index(ans)
-	if cfg.gpu then aidx = aidx:cuda() end
-	local aemd = lm.temd:forward(aidx)
-	local arep = lm.tas:forward(aemd)
+--	local aidx = get_index(ans)
+--	if cfg.gpu then aidx = aidx:cuda() end
+--	local aemd = lm.temd:forward(aidx)
+--	local arep = lm.tas:forward(aemd)
+	arep = ans 
+	if cfg.gpu then arep = arep:cuda() end
 	local sim_sc = lm.qt:forward({qst,arep})
 	return sim_sc[1]
 --]
@@ -246,18 +248,29 @@ function evaluate(name)
 	--评估训练好的模型的精度，top 1是正确答案的比例
 	local test_set = deep_cqa.insurance[name]
 	local answer_set = deep_cqa.insurance['answer']
+	local answer_vec = {}
 	if(test_set == nil) then
 		print('测试集载入为空！') return 
 	end
 	
 	local lm = cfg.lm	--语言模型
+	for i,v in pairs(answer_set) do
+		local ans_idx = get_index(v)
+		if cfg.gpu then ans_idx = ans_idx:cuda() end
+		local ans_emd = lm.temd:forward(ans_idx):clone()
+		local ans_rep = lm.tas:forward(ans_emd):float():clone()
+		if i% 10==0 then collectgarbage() end
+		answer_vec[i] = ans_rep
+	end
 	local results = {}
 	print('test process:')
 	for i,v in pairs(test_set) do
-		xlua.progress(i,1000)
+	--	xlua.progress(i,1000)
 		local gold = v[1]	--正确答案的集合
 		local qst = v[2]	--问题
 		local candidates = v[3] --候选的答案
+		print(i,'-th Question:')
+		print (qst)
 		local qidx = get_index(qst)
 		if cfg.gpu then qidx = qidx:cuda() end
 		local qemd = lm.qemd:forward(qidx):clone()
@@ -269,18 +282,25 @@ function evaluate(name)
 		
 		for k,c in pairs(gold) do 
 			c =tostring(tonumber(c))
-			local score = test_one_pair(qvec,answer_set[c])	--标准答案的得分
+			local score = test_one_pair(qvec,answer_vec[c])	--标准答案的得分
+			print('Golden',score,answer_set[c])
 			gold_sc[k] = score
 			gold_rank[k] = 1	--初始化排名
 		end
 		for k,c in pairs(candidates) do 
 			c =tostring(tonumber(c))
-			local score = test_one_pair(qvec,answer_set[c])
+			local score = test_one_pair(qvec,answer_vec[c])
+			local better =false
 			for m,n in pairs(gold_sc) do
 				if score > n then
 					gold_rank[m] = gold_rank[m]+1
+					better = true
 				end
 			end
+			if better then 
+				print('\tBetter',score,answer_set[c])
+			end
+			
 		end
 		
 		local mark =0.0
@@ -291,6 +311,8 @@ function evaluate(name)
 			end
 			mrr = mrr + 1.0/c
 		end
+		print('top 1?',mark,'MRR?',mrr)
+		print('\n')
 		results[i] = {mrr,mark}
 	if i%10==0 then collectgarbage() end
 	--if i >99 then break end
@@ -301,64 +323,6 @@ end
 --getlm()
 --testlm()
 train()
---torch.save('model/cov_3.bin',cfg.lm,'binary')
+torch.save('model/cov_toy_2.bin',cfg.lm,'binary')
 --cfg.lm = torch.load('model/cov_1.bin','binary')
 evaluate('dev')
---[[
-train()
-torch.save('model/cov_ref_1.bin',cfg.lm,'binary')
-evaluate('dev')
-train()
-torch.save('model/cov_ref_2.bin',cfg.lm,'binary')
-evaluate('dev')
-train()
-torch.save('model/cov_ref_3.bin',cfg.lm,'binary')
-evaluate('dev')
-train()
-torch.save('model/cov_ref_4.bin',cfg.lm,'binary')
-evaluate('dev')
-train()
-torch.save('model/cov_ref_5.bin',cfg.lm,'binary')
-evaluate('dev')
-train()
-torch.save('model/cov_ref_6.bin',cfg.lm,'binary')
-evaluate('dev')
-train()
-torch.save('model/cov_ref_7.bin',cfg.lm,'binary')
-evaluate('dev')
-train()
-torch.save('model/cov_ref_8.bin',cfg.lm,'binary')
-evaluate('dev')
-
-train()
-torch.save('model/cov_ref_9.bin',cfg.lm,'binary')
-evaluate('dev')
-train()
-torch.save('model/cov_ref_10.bin',cfg.lm,'binary')
-evaluate('dev')
-
-
-
---]]
-
---[[train()
-torch.save('model/cov_3.bin',cfg.lm,'binary')
-evaluate('dev')
-train()
-torch.save('model/cov_4.bin',cfg.lm,'binary')
-evaluate('dev')
-train()
-torch.save('model/cov_5.bin',cfg.lm,'binary')
-evaluate('dev')
-train()
-torch.save('model/cov_6.bin',cfg.lm,'binary')
-evaluate('dev')
-train()
-torch.save('model/cov_7.bin',cfg.lm,'binary')
-evaluate('dev')
-
-
-
-
-
---]]

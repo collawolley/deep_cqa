@@ -30,7 +30,7 @@ function CoSim:get_score(question, answer)
 					if t == nil then
 						t =0
 					else
-						t=t/(self.wc[aw][1]*self.wc[qw][1])
+						t=t*(self.wc[aw][1]*self.wc[qw][1])
 						--t=t/(self.wc[aw][1])
 					end
 					score[i] = score[i]+t				
@@ -42,8 +42,9 @@ function CoSim:get_score(question, answer)
 	for i,v in pairs(score) do 
 		value = value + v
 	end
-	value = value/#score
+	value = value/#score/#qst
 	return value
+	--return 0
 end
 --[[
 tmp = CoSim()

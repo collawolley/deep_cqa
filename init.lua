@@ -15,12 +15,18 @@ config = {}
 -------------------------------
 config.parent_path = lfs.currentdir() .. '/'
 --------词向量配置
---[
+--[	--性能最好的词向量
 config.emd_vec = config.parent_path .. 'data/glove/glove.840B.300d.th'
 config.emd_dict = config.parent_path .. 'data/glove/glove.840B.vocab'
 config.emd_dim = 300
 --]
-------
+-------
+--[[
+config.emd_vec = config.parent_path .. 'data/word2vec/Google_300.vec'
+config.emd_dict = config.parent_path .. 'data/word2vec/Google_300.dict'
+config.emd_dim = 300
+--]]
+-----
 --[[
 config.emd_vec = config.parent_path .. 'data/word2vec/SG_10.vec'
 config.emd_dict = config.parent_path .. 'data/word2vec/SG_10.dict'
@@ -44,7 +50,13 @@ config.emd_vec = config.parent_path .. 'data/word2vec/ins_100.vec'
 config.emd_dict = config.parent_path .. 'data/word2vec/ins_100.dict'
 config.emd_dim = 100
 --]]
-------------
+----- 
+--[[	--这个组词向量的性能不如glove的词向量性能好
+config.emd_vec = config.parent_path .. 'data/word2vec/mix_100.vec'
+config.emd_dict = config.parent_path .. 'data/word2vec/mix_100.dict'
+config.emd_dim = 100
+--]]
+-----------
 config.insurance = {}
 config.insurance.train = config.parent_path .. 'data/insurance_qa/' .. 'train.txt'
 config.insurance.dev = config.parent_path .. 'data/insurance_qa/' .. 'dev.txt'
@@ -53,7 +65,7 @@ config.insurance.test2 = config.parent_path .. 'data/insurance_qa/' .. 'test2.tx
 config.insurance.answer = config.parent_path .. 'data/insurance_qa/' .. 'answer.txt'
 config.insurance.dict = config.parent_path .. 'data/insurance_qa/' .. 'dict.txt'
 config.insurance.binary = config.parent_path .. 'data/insurance_qa/' .. 'full_dataset.bin'
-config.insurance.negative_size = 50
+config.insurance.negative_size =1
 -------------
 config.batch_size = 5
 config.random_seed =134
@@ -64,7 +76,7 @@ config.word_count = 'data/context/word_count.tab'
 deep_cqa.config = config
 deep_cqa.insurance = {}
 deep_cqa.ins_meth ={}
-deep_cqa.ins_meth.train = config.parent_path .. 'data/insurance_qa/' .. 'train_50.bin'
+deep_cqa.ins_meth.train = config.parent_path .. 'data/insurance_qa/' .. 'train_1.bin'
 deep_cqa.ins_meth.validation = config.parent_path .. 'data/insurance_qa/' .. 'train_10.bin'
 deep_cqa.ins_meth.test = config.parent_path .. 'data/insurance_qa/' .. 'train_10.bin'
 -------------------------------
