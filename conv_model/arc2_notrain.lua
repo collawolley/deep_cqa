@@ -55,8 +55,11 @@ function getlm()
 	lm.fas = nn.Sequential()
 
 	lm.qst:add(hlq)
+	lm.qst:add(nn.Tanh())
 	lm.tas:add(hlt)
+	lm.tas:add(nn.Tanh())
 	lm.fas:add(hlf)
+	lm.fas:add(nn.Tanh())
 	---------------------
 	lm.qst:add(nn.Replicate(1))
 	lm.tas:add(nn.Replicate(1))
@@ -254,6 +257,7 @@ function evaluate(name)
 	local results = {}
 	print('test process:')
 	for i,v in pairs(test_set) do
+		if (i=='size') then break end
 		xlua.progress(i,1000)
 		local gold = v[1]	--正确答案的集合
 		local qst = v[2]	--问题
@@ -301,64 +305,6 @@ end
 --getlm()
 --testlm()
 train()
---torch.save('model/cov_3.bin',cfg.lm,'binary')
+torch.save('model/cov_3.bin',cfg.lm,'binary')
 --cfg.lm = torch.load('model/cov_1.bin','binary')
 evaluate('dev')
---[[
-train()
-torch.save('model/cov_ref_1.bin',cfg.lm,'binary')
-evaluate('dev')
-train()
-torch.save('model/cov_ref_2.bin',cfg.lm,'binary')
-evaluate('dev')
-train()
-torch.save('model/cov_ref_3.bin',cfg.lm,'binary')
-evaluate('dev')
-train()
-torch.save('model/cov_ref_4.bin',cfg.lm,'binary')
-evaluate('dev')
-train()
-torch.save('model/cov_ref_5.bin',cfg.lm,'binary')
-evaluate('dev')
-train()
-torch.save('model/cov_ref_6.bin',cfg.lm,'binary')
-evaluate('dev')
-train()
-torch.save('model/cov_ref_7.bin',cfg.lm,'binary')
-evaluate('dev')
-train()
-torch.save('model/cov_ref_8.bin',cfg.lm,'binary')
-evaluate('dev')
-
-train()
-torch.save('model/cov_ref_9.bin',cfg.lm,'binary')
-evaluate('dev')
-train()
-torch.save('model/cov_ref_10.bin',cfg.lm,'binary')
-evaluate('dev')
-
-
-
---]]
-
---[[train()
-torch.save('model/cov_3.bin',cfg.lm,'binary')
-evaluate('dev')
-train()
-torch.save('model/cov_4.bin',cfg.lm,'binary')
-evaluate('dev')
-train()
-torch.save('model/cov_5.bin',cfg.lm,'binary')
-evaluate('dev')
-train()
-torch.save('model/cov_6.bin',cfg.lm,'binary')
-evaluate('dev')
-train()
-torch.save('model/cov_7.bin',cfg.lm,'binary')
-evaluate('dev')
-
-
-
-
-
---]]
