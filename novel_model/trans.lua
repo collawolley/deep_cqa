@@ -137,7 +137,7 @@ function train()
 		gold = gold:cuda()
 	end
 	local learningRate = 0.01
-	local learningRate = 0.03
+	--local learningRate = 0.03
 
 	local next_sample = true	--是否获取下一个sample
 	local sample =1	--占个坑
@@ -350,7 +350,7 @@ for epoch =1,50 do
 --	cfg.dict = nil
 --	cfg.lm ={}
 --	cfg.lm = getlm()
-	data_set:resetTrainset(10)
+	data_set:resetTrainset(1)
 	cfg.margin = 0.042
 	cfg.L2Rate = 0.003
 	print('L2Rate:',cfg.L2Rate)
