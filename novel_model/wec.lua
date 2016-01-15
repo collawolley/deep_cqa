@@ -1,7 +1,7 @@
 --[[
-	原来的使用的训练方法可能是错误的，现在在训练过程中，先训练一个样本使其收敛后再训练其他样本
+	尝试实现WEC模型，并验证其是否有作用
 	author:	liangjz
-	time:	2015-01-11
+	time:	2015-01-15
 --]]
 require('..')
 local cfg = {}
@@ -10,8 +10,8 @@ cfg.dict = nil	--字典
 cfg.emd = nil	--词向量
 cfg.dim = deep_cqa.config.emd_dim	--词向量的维度
 cfg.gpu = true	--是否使用gpu模式
+data_set = InsSet(1)	--保险数据集，这里载入是为了获得测试集和答案
 cfg.L2Rate =0.0001	--L2范式的约束
-data_set = InsSet()	--保险数据集，这里载入是为了获得测试集和答案
 cfg.margin = 0.009
 -----------------------
 function get_index(sent) --	获取一个句子的索引表达，作为整个模型的输入，可以直接应用到词向量层
@@ -27,19 +27,33 @@ end
 function getlm()
 	get_index('today is')
 -------------------------------------
-	local qcov = nn.SpatialConvolution(1,1000,200,2,1,1,0,1)	--input需要是3维tensor
-	local tcov = qcov:clone('weights','bias')
-	local fcov = qcov:clone('weights','bias')
+	local hlq = nn.Linear(cfg.dim,cfg.dim)	--转移矩阵
+	local hlt = hlq:clone()	--不克隆权重和偏移
+	local hlf = hlt:clone('weights','bias')
 -------------------------------------
-	local pt = nn.Sequential()
-	pt:add(nn.SpatialAdaptiveMaxPooling(1,1))
-	pt:add(nn.Reshape(1000))
-	pt:add(nn.Tanh())
+	--下面是cos sim的计算nn图
+	local m1 = nn.ConcatTable()
+	m1:add(nn.Identity())
+	m1:add(nn.Identity())
+	local m2 = nn.Sequential()
+	m2:add(m1)
+	m2:add(nn.CMulTable())
+	m2:add(nn.Sum(2))
+	m2:add(nn.Reshape(1))
+	local m3 = m2:clone()
+	local m4 = nn.ParallelTable()
+	m4:add(m2)
+	m4:add(m3)
+	local m5 = nn.Sequential()
+	m5:add(m4)
+	m5:add(nn.MM(false,true))
+	m5:add(nn.Sqrt())
+	local m6 = nn.ConcatTable():add(nn.MM(false,true)):add(m5)
+	local m7 = nn.Sequential():add(m6):add(nn.CDivTable())
+	local cosine = m7
+	-- cos 相似度模块构建完成
 -------------------------------------
-	local hlq = nn.Linear(cfg.dim,200)
-	local hlt = hlq:clone('weights','bias')
-	local hlf = hlq:clone('weights','bias')
--------------------------------------
+
 	local lm = {}	--待返回的语言模型
 	lm.qemd = cfg.emd	--词嵌入部分
 	lm.temd = lm.qemd:clone('weights','bias')
@@ -47,36 +61,29 @@ function getlm()
 	lm.qst = nn.Sequential()
 	lm.tas = nn.Sequential()
 	lm.fas = nn.Sequential()
+	lm.qst:add(lm.qemd)
+	lm.tas:add(lm.temd)
+	lm.fas:add(lm.femd)
 
-	lm.qst:add(hlq)
-	lm.tas:add(hlt)
+	lm.qst:add(nn.Identity())	--问题部分的词向量不做转换
+	lm.tas:add(hlt)	--正负答案的部分做词向量转换
 	lm.fas:add(hlf)
 	---------------------
-	lm.qst:add(nn.Tanh())
-	lm.tas:add(nn.Tanh())
-	lm.fas:add(nn.Tanh())
-
+	lm.qt = nn.Sequential()
+	lm.qf = nn.Sequential()
 	---------------------
-	lm.qst:add(nn.Replicate(1))
-	lm.tas:add(nn.Replicate(1))
-	lm.fas:add(nn.Replicate(1))
+	lm.qt:add(cosine:clone())	--计算二者的cosine相似度(问题和正样本)
+	lm.qf:add(cosine:clone())	--问题和负样本
 	---------------------
-	lm.qst:add(qcov)
-	lm.tas:add(tcov)
-	lm.fas:add(fcov)
+	lm.qt:add(nn.Max(1))	--为每个答案寻找最相近的问题中的词	
+	lm.qf:add(nn.Max(1))	--缩掉问题所在的维度，为第一维
 	---------------------
-	lm.qst:add(pt:clone())
-	lm.tas:add(pt:clone())
-	lm.fas:add(pt:clone())
-	----------------------
-	lm.qt = nn.CosineDistance()	--nn包里的cosine distance实际上计算方式为wiki的cosine similarity
-	lm.qf = nn.CosineDistance()
+	lm.qt:add(nn.Mean(1))
+	lm.qf:add(nn.Mean(1))
+	---------------------
 	lm.sub = nn.PairwiseDistance(1)
 -------------------------------
 	if cfg.gpu then
-		lm.qemd:cuda()
-		lm.temd:cuda()
-		lm.femd:cuda()
 		lm.qst:cuda()
 		lm.tas:cuda()
 		lm.fas:cuda()
@@ -103,30 +110,26 @@ function testlm()	--应用修改模型后测试模型是否按照预期执行
 		index2 = index2:cuda()
 		index3 = index3:cuda()
 	end
-	local vec1 = lm.emd:forward(index1):clone()
-	local vec2 = lm.emd:forward(index2):clone()
-	local vec3 = lm.emd:forward(index3):clone()
+	print(index1:size(),index2:size(),index3:size())
+	local vec1 = lm.qst:forward(index1):clone()
+	local vec2 = lm.tas:forward(index2):clone()
+	local vec3 = lm.fas:forward(index3):clone()
+	print(vec1:size(),vec2:size(),vec3:size())
+	local tmp = nn.Mean(1):cuda()
+	local cos1 = lm.qt:forward({vec1,vec2})
+	print(cos1)
+	print(tmp:forward(cos1))
 	
-	local hl = nn.Linear(cfg.dim,200)
-	local q =  lm.qst:forward(vec1)
-	local t =  lm.tas:forward(vec2)
-	local f =  lm.fas:forward(vec3)
-	local qt = lm.qt:forward({q,t})
-	local qf = lm.qf:forward({q,f})
-	local sub = lm.sub:forward({qf,qt})
-	print(qt,qf,sub)
 end
---------------------------
-cfg.lm = getlm()
 -------------------------
-function train()
+function train(lr)
 	local lm = cfg.lm
 	local modules = nn.Parallel()
-	modules:add(lm.qst)
-	modules:add(lm.tas)
-	modules:add(lm.fas)
-	modules:add(lm.tq)
-	modules:add(lm.fq)
+	--modules:add(lm.qst)
+	modules:add(lm.hlt)
+	modules:add(lm.hlf)
+	modules:add(lm.qt)
+	modules:add(lm.qf)
 	modules:add(lm.sub)
 	params,grad_params = modules:getParameters()
 
@@ -136,8 +139,7 @@ function train()
 		criterion:cuda()
 		gold = gold:cuda()
 	end
-	local learningRate = 0.01
-	--local learningRate = 0.03
+	local learningRate = lr or 0.01	--LearningRate的值来自
 
 	local next_sample = true	--是否获取下一个sample
 	local sample =1	--占个坑
@@ -150,81 +152,55 @@ function train()
 	while sample ~= nil do	--数据集跑完？
 		loop = loop + 1
 		if loop %100 ==0 then xlua.progress(data_set.current_train,data_set.train_set.size) end
-		if next_sample then
-			sample = data_set:getNextPair()
-			if sample == nil then break end	--数据集获取完毕
-			index[1] = get_index(sample[1]):clone()
-			index[2] = get_index(sample[2]):clone()
-			index[3] = get_index(sample[3]):clone()
-			if(cfg.gpu) then
-				index[1] = index[1]:cuda() 
-			 	index[2] = index[2]:cuda() 
-			 	index[3]= index[3]:cuda() 
-			end
-			next_sample = true --满足特定条件才获取下一个sample
+		sample = data_set:getNextPair()
+		if sample == nil then break end	--数据集获取完毕
+		index[1] = get_index(sample[1]):clone()
+		index[2] = get_index(sample[2]):clone()
+		index[3] = get_index(sample[3]):clone()
+		if(cfg.gpu) then
+			index[1] = index[1]:cuda() 
+			index[2] = index[2]:cuda() 
+			index[3]= index[3]:cuda() 
 		end
---[
-		if loop % 2 ==0 then
-			index[2],index[3] = index[3],index[2]
-			gold[1] = -1
-		else
-			gold[1] = 1
-		end
---]
-		vecs[1] = lm.qemd:forward(index[1]):clone()
-		vecs[2] = lm.temd:forward(index[2]):clone()
-		vecs[3] = lm.femd:forward(index[3]):clone()	
+
+		vecs[1] = lm.qst:forward(index[1]):clone()	--问题的表达
+		vecs[2] = lm.tas:forward(index[2]):clone()	--（正确）答案的表达
+		vecs[3] = lm.fas:forward(index[3]):clone()	--错误答案的表达
 		
-		local rep1 = lm.qst:forward(vecs[1])
-		local rep2 = lm.tas:forward(vecs[2])
-		local rep3 = lm.fas:forward(vecs[3])
+		local qt_rep = lm.qt:forward({vecs[1],vecs[2]})	--问题和正样本最后的得分
+		local qf_rep = lm.qf:forward({vecs[1],vecs[3]})	--问题和负样本最后的得分
 				
-		local sc_1 = lm.qt:forward({rep1,rep2})
-		local sc_2 = lm.qf:forward({rep1,rep3})
-		local pred = lm.sub:forward({sc_1,sc_2})	-- 因为是距离参数转换为相似度参数，所以是负样本减正样本
-		
+		local pred = lm.sub:forward({qt_rep,qf_rep})	-- 因为是距离参数转换为相似度参数，所以是负样本减正样本
 		local err = criterion:forward(pred,gold)
+
 		sample_count = sample_count + 1
 		if err <= 0 then
-			next_sample = true
 			right_sample = right_sample + 1
 		end
-	--	else
-			lm.sub:zeroGradParameters()
-			lm.qt:zeroGradParameters()
-			lm.qf:zeroGradParameters()
-			lm.qst:zeroGradParameters()
-			lm.tas:zeroGradParameters()
-			lm.fas:zeroGradParameters()
-			lm.qemd:zeroGradParameters()
-			lm.temd:zeroGradParameters()
-			lm.femd:zeroGradParameters()				
-			local e0 = criterion:backward(pred,gold)
-			e1 = e0  + cfg.L2Rate*0.5*params:norm(2)	--二阶范数
-			--print('loss',pred[1],err,e0[1],e1[1])
-			local e2 = lm.sub:backward({sc_1,sc_2},e1)
-			local e3 = lm.qt:backward({rep1,rep2},e2[1])
-			local e4 = lm.qf:backward({rep1,rep3},e2[2])
+
+		lm.sub:zeroGradParameters()
+		lm.qt:zeroGradParameters()
+		lm.qf:zeroGradParameters()
+		lm.qst:zeroGradParameters()
+		lm.tas:zeroGradParameters()
+		lm.fas:zeroGradParameters()
+
+		local e0 = criterion:backward(pred,gold)
+		e1 = e0  + cfg.L2Rate*0.5*params:norm(2)	--二阶范数
+		local e2 = lm.sub:backward({qt_rep,qf_rep},e1)
+		local e3 = lm.qt:backward({vecs[1],vecs[2]},e2[1])
+		local e4 = lm.qf:backward({vecs[1],vecs[3]},e2[2])
 			
-			local e5 = lm.qst:backward(vecs[1],(e3[1]+e4[1])/2)
-			local e7 = lm.tas:backward(vecs[2],e3[2])
-			local e8 = lm.fas:backward(vecs[3],e4[2])
+		local e5 = lm.qst:backward(index[1],(e3[1]+e4[1])/2)
+		local e7 = lm.tas:backward(index[2],e3[2])
+		local e8 = lm.fas:backward(index[3],e4[2])
 			
-			lm.sub:updateParameters(learningRate)
-			lm.qt:updateParameters(learningRate)
-			lm.qf:updateParameters(learningRate)
-			lm.qst:updateParameters(learningRate)
-			lm.tas:updateParameters(learningRate)
-			lm.fas:updateParameters(learningRate)
---[	
-			lm.qemd:backward(index[1],e5)
-			lm.qemd:updateParameters(learningRate)
-			lm.temd:backward(index[2],e7)
-			lm.temd:updateParameters(learningRate)
-			lm.femd:backward(index[3],e8)
-			lm.femd:updateParameters(learningRate)
---]
---		end
+		lm.sub:updateParameters(learningRate)
+		lm.qt:updateParameters(learningRate)
+		lm.qf:updateParameters(learningRate)
+		lm.qst:updateParameters(learningRate)
+		lm.tas:updateParameters(learningRate)
+		lm.fas:updateParameters(learningRate)
 	end
 	print('\n训练集的准确率：',right_sample/sample_count)
 end
@@ -261,9 +237,7 @@ function evaluate(name)	--评估训练好的模型的精度，top 1是正确答�
 		local answer = answer_pair[2]	--获取问题内容
 		local word_index = get_index(answer)	--获取词下标
 		if cfg.gpu then word_index = word_index:cuda() end
-		local answer_emd = lm.temd:forward(word_index):clone()
-		local answer_rep = lm.tas:forward(answer_emd):clone()
-		--print(answer,word_index[1],answer_rep[1])
+		local answer_rep = lm.tas:forward(word_index):clone()
 		data_set:saveAnswerVec(answer_pair[1],answer_rep)
 		answer_pair = data_set:getNextAnswer()
 	end	
@@ -287,8 +261,7 @@ function evaluate(name)	--评估训练好的模型的精度，top 1是正确答�
 		local candidates = test_pair[3] --候选的答案
 		local qst_idx = get_index(qst)
 		if cfg.gpu then qst_idx = qst_idx:cuda() end
-		local qst_emd = lm.qemd:forward(qst_idx):clone()
-		local qst_vec = lm.qst:forward(qst_emd):clone()
+		local qst_vec = lm.qst:forward(qst_idx):clone()
 
 		local sc = {}	
 		local gold_sc ={}
@@ -299,11 +272,9 @@ function evaluate(name)	--评估训练好的模型的精度，top 1是正确答�
 			gold_sc[k] = score
 			gold_rank[k] = 1	--初始化排名
 		end
-		--print('\n',torch.Tensor(gold_sc))
 
 		for k,c in pairs(candidates) do 
 			local score = test_one_pair(qst_vec,c)
-		--	print(score)
 			for m,n in pairs(gold_sc) do
 				if score > n then
 					gold_rank[m] = gold_rank[m]+1
@@ -330,35 +301,32 @@ function evaluate(name)	--评估训练好的模型的精度，top 1是正确答�
 	end
 
 	local results = torch.Tensor(results)
---	print(results)
 	print('\nResults:',torch.sum(results,1)/results:size()[1])
 end
---getlm()
+
+cfg.lm = getlm()
 --testlm()
 --train()
---torch.save('model/cov_sdg2_1.bin',cfg.lm,'binary')
---data_set:resetTrainset(1)
---cfg.lm = torch.load('model/cov_1.bin','binary')
 --evaluate('dev')
 
+--[
 --cfg.lm = torch.load('model/cov_sdg2_lc1_1.bin','binary')
-for epoch =1,5 do 
+for epoch =1,50 do 
 	print('\nTraining in ',epoch,'epoch:')
-	cfg.L2Rate = 0.0001--0.0001*3^epoch
-	local margin={0.01,0.02,0.03,0.5,0.7}
+--	cfg.L2Rate = 0.0001--0.0001*3^epoch
+--	local margin={0.0009,0.003,0.009,0.03,0.1}
 --	local l2={0.0003,0.01,0.03,0.1,0.3,1}
 --	cfg.dict = nil
 --	cfg.lm ={}
 --	cfg.lm = getlm()
 	data_set:resetTrainset(1)
-	cfg.margin = margin[epoch]
-	cfg.L2Rate = 0.003
+--	cfg.margin = 0.042
+--	cfg.L2Rate = 0.003
 	print('L2Rate:',cfg.L2Rate)
 	print('Margin:',cfg.margin)
 	train()
-	--cfg.lm = torch.load('model/cov_sdg2_lc2_' .. epoch ..'.bin','binary')
-	torch.save('model/cov_sdg2_lc8_' .. epoch ..'.bin',cfg.lm,'binary')
+	--cfg.lm = torch.load('model/cov_sdg2_lc9_' .. epoch ..'.bin','binary')
+--	torch.save('model/cov_sdg2_lc8_' .. epoch ..'.bin',cfg.lm,'binary')
 	evaluate('dev')
---	cfg.margin = cfg.margin*3
 end
-
+--]
