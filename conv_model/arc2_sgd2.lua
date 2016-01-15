@@ -71,7 +71,8 @@ function getlm()
 	----------------------
 	lm.qt = nn.CosineDistance()	--nn包里的cosine distance实际上计算方式为wiki的cosine similarity
 	lm.qf = nn.CosineDistance()
-	lm.sub = nn.PairwiseDistance(1)
+--	lm.sub = nn.PairwiseDistance(1)
+	lm.sub = nn.CSubTable()
 -------------------------------
 	if cfg.gpu then
 		lm.qemd:cuda()

@@ -81,7 +81,7 @@ function getlm()
 	lm.qt:add(nn.Mean(1))
 	lm.qf:add(nn.Mean(1))
 	---------------------
-	lm.sub = nn.PairwiseDistance(1)
+	lm.sub = nn.CSubTable()
 -------------------------------
 	if cfg.gpu then
 		lm.qst:cuda()
@@ -152,6 +152,7 @@ function train(lr)
 	while sample ~= nil do	--数据集跑完？
 		loop = loop + 1
 		if loop %100 ==0 then xlua.progress(data_set.current_train,data_set.train_set.size) end
+		if loop%10==0 then collectgarbage() end
 		sample = data_set:getNextPair()
 		if sample == nil then break end	--数据集获取完毕
 		index[1] = get_index(sample[1]):clone()
@@ -171,6 +172,7 @@ function train(lr)
 		local qf_rep = lm.qf:forward({vecs[1],vecs[3]})	--问题和负样本最后的得分
 				
 		local pred = lm.sub:forward({qt_rep,qf_rep})	-- 因为是距离参数转换为相似度参数，所以是负样本减正样本
+		print(qt_rep[1],qf_rep[1],pred[1])
 		local err = criterion:forward(pred,gold)
 
 		sample_count = sample_count + 1
@@ -206,12 +208,17 @@ function train(lr)
 end
 ------------------------------------------------------------------------
 function test_one_pair(question_vec,answer_id) 	--给定一个问答pair，计算其相似度	
-	--传入的qst为已经计算好的向量，ans为问题的id
+	--传入的qst为已经计算好的向量，ans为问题的id	
 	local lm = cfg.lm
-	local answer_rep = data_set:getAnswerVec(answer_id)	--获取答案的表达
+	local answer_index = get_index(data_set:getAnswer(answer_id))
 	if cfg.gpu then
-		answer_rep = answer_rep:cuda()
+		answer_index = answer_index:cuda()
 	end
+	local answer_rep = lm.tas:forward(answer_index)
+	--local answer_rep = data_set:getAnswerVec(answer_id)	--获取答案的表达
+	--if cfg.gpu then
+	--	answer_rep = answer_rep:cuda()
+	--end
 	local sim_sc = lm.qt:forward({question_vec,answer_rep})
 --	print(question_vec[1],answer_id,answer_rep[1],sim_sc[1])
 	return sim_sc[1]
@@ -228,11 +235,12 @@ function evaluate(name)	--评估训练好的模型的精度，top 1是正确答�
 	end
 
 --	data_set.answer_vecs = torch.load('model/answer_vecs','binary')
---[
+--[[
 	print('\nCalculating answers')
 	local answer_pair = data_set:getNextAnswer(true)	--从头开始计算answer的向量
 	while answer_pair~=nil do
 		loop = loop+1
+		if loop%10==0 then collectgarbage() end
 		xlua.progress(loop,data_set.answer_set.size)
 		local answer = answer_pair[2]	--获取问题内容
 		local word_index = get_index(answer)	--获取词下标
@@ -242,7 +250,7 @@ function evaluate(name)	--评估训练好的模型的精度，top 1是正确答�
 		answer_pair = data_set:getNextAnswer()
 	end	
 --	torch.save('model/answer_vecs',data_set.answer_vecs,'binary')
---]
+--]]
 	collectgarbage() 
 	print('\nTest process:')
 	local test_pair =nil
@@ -320,8 +328,8 @@ for epoch =1,50 do
 --	cfg.lm ={}
 --	cfg.lm = getlm()
 	data_set:resetTrainset(1)
---	cfg.margin = 0.042
---	cfg.L2Rate = 0.003
+	cfg.margin = 0.42
+	cfg.L2Rate = 0.003
 	print('L2Rate:',cfg.L2Rate)
 	print('Margin:',cfg.margin)
 	train()
