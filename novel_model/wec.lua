@@ -10,9 +10,9 @@ cfg.dict = nil	--字典
 cfg.emd = nil	--词向量
 cfg.dim = deep_cqa.config.emd_dim	--词向量的维度
 cfg.gpu = true	--是否使用gpu模式
-data_set = InsSet(1)	--保险数据集，这里载入是为了获得测试集和答案
 cfg.L2Rate =0.0001	--L2范式的约束
 cfg.margin = 0.009
+data_set = InsSet(1)	--保险数据集，这里载入是为了获得测试集和答案
 -----------------------
 function get_index(sent) --	获取一个句子的索引表达，作为整个模型的输入，可以直接应用到词向量层
 	if cfg.dict == nil then --	载入字典和词向量查询层
@@ -28,8 +28,17 @@ function getlm()
 	get_index('today is')
 -------------------------------------
 	local hlq = nn.Linear(cfg.dim,cfg.dim)	--转移矩阵
-	local hlt = hlq:clone()	--不克隆权重和偏移
-	local hlf = hlt:clone('weights','bias')
+	hlq['weight']:zero()
+--	print(hlq['weight'])
+	for i =1,cfg.dim do
+		hlq['weight'][i][i] =1
+	end
+--	print('hlq weight\n',hlq['weight'])
+	local hlt = hlq:clone('weight','bias')	--不克隆权重和偏移
+--	print('hlt weight\n',hlt['weight'])
+--	print(hlq)
+	--local hlt = nn.Identity()
+	local hlf = hlt:clone('weight','bias')
 -------------------------------------
 	--下面是cos sim的计算nn图
 	local m1 = nn.ConcatTable()
@@ -55,6 +64,7 @@ function getlm()
 -------------------------------------
 
 	local lm = {}	--待返回的语言模型
+	lm.mark = hlt
 	lm.qemd = cfg.emd	--词嵌入部分
 	lm.temd = lm.qemd:clone('weights','bias')
 	lm.femd = lm.qemd:clone('weights','bias')
@@ -151,6 +161,7 @@ function train(lr)
 	local right_sample = 0
 	while sample ~= nil do	--数据集跑完？
 		loop = loop + 1
+        if loop %100==0 then print(cfg.lm.mark['weight']) end
 		if loop %100 ==0 then xlua.progress(data_set.current_train,data_set.train_set.size) end
 		if loop%10==0 then collectgarbage() end
 		sample = data_set:getNextPair()
@@ -172,7 +183,7 @@ function train(lr)
 		local qf_rep = lm.qf:forward({vecs[1],vecs[3]})	--问题和负样本最后的得分
 				
 		local pred = lm.sub:forward({qt_rep,qf_rep})	-- 因为是距离参数转换为相似度参数，所以是负样本减正样本
-		print(qt_rep[1],qf_rep[1],pred[1])
+		--print(qt_rep[1],qf_rep[1],pred[1])
 		local err = criterion:forward(pred,gold)
 
 		sample_count = sample_count + 1
@@ -313,28 +324,29 @@ function evaluate(name)	--评估训练好的模型的精度，top 1是正确答�
 end
 
 cfg.lm = getlm()
+print(cfg.lm.mark['weight'])
 --testlm()
 --train()
 --evaluate('dev')
 
 --[
 --cfg.lm = torch.load('model/cov_sdg2_lc1_1.bin','binary')
-for epoch =1,50 do 
+for epoch =1,1 do 
 	print('\nTraining in ',epoch,'epoch:')
---	cfg.L2Rate = 0.0001--0.0001*3^epoch
---	local margin={0.0009,0.003,0.009,0.03,0.1}
+	local margin={0.0033,0.01,0.033,0.1,0.33,1}
 --	local l2={0.0003,0.01,0.03,0.1,0.3,1}
---	cfg.dict = nil
---	cfg.lm ={}
---	cfg.lm = getlm()
+	cfg.dict = nil
+	cfg.lm ={}
+	cfg.lm = getlm()
 	data_set:resetTrainset(1)
 	cfg.margin = 0.42
-	cfg.L2Rate = 0.003
+	cfg.L2Rate = 0.1
 	print('L2Rate:',cfg.L2Rate)
 	print('Margin:',cfg.margin)
 	train()
 	--cfg.lm = torch.load('model/cov_sdg2_lc9_' .. epoch ..'.bin','binary')
 --	torch.save('model/cov_sdg2_lc8_' .. epoch ..'.bin',cfg.lm,'binary')
 	evaluate('dev')
+	
 end
 --]
