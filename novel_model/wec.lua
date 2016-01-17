@@ -29,15 +29,11 @@ function getlm()
 -------------------------------------
 	local hlq = nn.Linear(cfg.dim,cfg.dim)	--转移矩阵
 	hlq['weight']:zero()
---	print(hlq['weight'])
+	hlq['bias']:zero()
 	for i =1,cfg.dim do
 		hlq['weight'][i][i] =1
 	end
---	print('hlq weight\n',hlq['weight'])
-	local hlt = hlq:clone('weight','bias')	--不克隆权重和偏移
---	print('hlt weight\n',hlt['weight'])
---	print(hlq)
-	--local hlt = nn.Identity()
+	local hlt = hlq:clone()	--不共享权重和偏移
 	local hlf = hlt:clone('weight','bias')
 -------------------------------------
 	--下面是cos sim的计算nn图
@@ -66,8 +62,8 @@ function getlm()
 	local lm = {}	--待返回的语言模型
 	lm.mark = hlt
 	lm.qemd = cfg.emd	--词嵌入部分
-	lm.temd = lm.qemd:clone('weights','bias')
-	lm.femd = lm.qemd:clone('weights','bias')
+	lm.temd = lm.qemd:clone('weight','bias')
+	lm.femd = lm.qemd:clone('weight','bias')
 	lm.qst = nn.Sequential()
 	lm.tas = nn.Sequential()
 	lm.fas = nn.Sequential()
@@ -120,16 +116,17 @@ function testlm()	--应用修改模型后测试模型是否按照预期执行
 		index2 = index2:cuda()
 		index3 = index3:cuda()
 	end
-	print(index1:size(),index2:size(),index3:size())
+	print(index1,index2,index3)
+	--print(index1:size(),index2:size(),index3:size())
 	local vec1 = lm.qst:forward(index1):clone()
 	local vec2 = lm.tas:forward(index2):clone()
 	local vec3 = lm.fas:forward(index3):clone()
 	print(vec1:size(),vec2:size(),vec3:size())
-	local tmp = nn.Mean(1):cuda()
+	local tmp = nn.CosineDistance():cuda()
 	local cos1 = lm.qt:forward({vec1,vec2})
 	print(cos1)
-	print(tmp:forward(cos1))
-	
+	print(tmp:forward({vec1[2],vec2[3]}))
+	print(vec1[2][1],vec2[3][1])
 end
 -------------------------
 function train(lr)
@@ -324,7 +321,6 @@ function evaluate(name)	--评估训练好的模型的精度，top 1是正确答�
 end
 
 cfg.lm = getlm()
-print(cfg.lm.mark['weight'])
 --testlm()
 --train()
 --evaluate('dev')
@@ -338,14 +334,14 @@ for epoch =1,1 do
 	cfg.dict = nil
 	cfg.lm ={}
 	cfg.lm = getlm()
-	data_set:resetTrainset(1)
+	data_set:resetTrainset(10)
 	cfg.margin = 0.42
 	cfg.L2Rate = 0.1
 	print('L2Rate:',cfg.L2Rate)
 	print('Margin:',cfg.margin)
 	train()
 	--cfg.lm = torch.load('model/cov_sdg2_lc9_' .. epoch ..'.bin','binary')
---	torch.save('model/cov_sdg2_lc8_' .. epoch ..'.bin',cfg.lm,'binary')
+	--torch.save('model/cov_sdg2_lc8_' .. epoch ..'.bin',cfg.lm,'binary')
 	evaluate('dev')
 	
 end
