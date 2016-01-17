@@ -162,7 +162,7 @@ function train()
 			 	index[2] = index[2]:cuda() 
 			 	index[3]= index[3]:cuda() 
 			end
-			next_sample = true --满足特定条件才获取下一个sample
+			next_sample = false --满足特定条件才获取下一个sample
 		end
 --[
 		if loop % 2 ==0 then
@@ -185,6 +185,7 @@ function train()
 		local pred = lm.sub:forward({sc_1,sc_2})	-- 因为是距离参数转换为相似度参数，所以是负样本减正样本
 		
 		local err = criterion:forward(pred,gold)
+		--print(pred[1],err)
 		sample_count = sample_count + 1
 		if err <= 0 then
 			next_sample = true
@@ -342,23 +343,24 @@ end
 --cfg.lm = torch.load('model/cov_1.bin','binary')
 --evaluate('dev')
 
---cfg.lm = torch.load('model/cov_sdg2_lc1_1.bin','binary')
-for epoch =1,5 do 
+--cfg.lm = torch.load('model/cov_sdg2_lc9_20.bin','binary')
+--evaluate('dev')
+for epoch =1,50 do 
 	print('\nTraining in ',epoch,'epoch:')
 	cfg.L2Rate = 0.0001--0.0001*3^epoch
-	local margin={0.01,0.02,0.03,0.5,0.7}
+	local margin={0.003,0.009,0.03,0.1,0.3,1}
 --	local l2={0.0003,0.01,0.03,0.1,0.3,1}
 --	cfg.dict = nil
 --	cfg.lm ={}
 --	cfg.lm = getlm()
 	data_set:resetTrainset(1)
-	cfg.margin = margin[epoch]
-	cfg.L2Rate = 0.003
+	cfg.margin = 0.009
+	cfg.L2Rate = 0.0001
 	print('L2Rate:',cfg.L2Rate)
 	print('Margin:',cfg.margin)
 	train()
 	--cfg.lm = torch.load('model/cov_sdg2_lc2_' .. epoch ..'.bin','binary')
-	torch.save('model/cov_sdg2_lc8_' .. epoch ..'.bin',cfg.lm,'binary')
+	torch.save('model/cov_sdg2_lc10_' .. epoch ..'.bin',cfg.lm,'binary')
 	evaluate('dev')
 --	cfg.margin = cfg.margin*3
 end
