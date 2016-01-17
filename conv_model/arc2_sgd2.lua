@@ -28,8 +28,8 @@ function getlm()
 	get_index('today is')
 -------------------------------------
 	local qcov = nn.SpatialConvolution(1,1000,200,2,1,1,0,1)	--input需要是3维tensor
-	local tcov = qcov:clone('weights','bias')
-	local fcov = qcov:clone('weights','bias')
+	local tcov = qcov:clone('weight','bias')
+	local fcov = qcov:clone('weight','bias')
 -------------------------------------
 	local pt = nn.Sequential()
 	pt:add(nn.SpatialAdaptiveMaxPooling(1,1))
@@ -37,13 +37,13 @@ function getlm()
 	pt:add(nn.Tanh())
 -------------------------------------
 	local hlq = nn.Linear(cfg.dim,200)
-	local hlt = hlq:clone('weights','bias')
-	local hlf = hlq:clone('weights','bias')
+	local hlt = hlq:clone('weight','bias')
+	local hlf = hlq:clone('weight','bias')
 -------------------------------------
 	local lm = {}	--待返回的语言模型
 	lm.qemd = cfg.emd	--词嵌入部分
-	lm.temd = lm.qemd:clone('weights','bias')
-	lm.femd = lm.qemd:clone('weights','bias')
+	lm.temd = lm.qemd:clone('weight','bias')
+	lm.femd = lm.qemd:clone('weight','bias')
 	lm.qst = nn.Sequential()
 	lm.tas = nn.Sequential()
 	lm.fas = nn.Sequential()
@@ -162,7 +162,7 @@ function train()
 			 	index[2] = index[2]:cuda() 
 			 	index[3]= index[3]:cuda() 
 			end
-			next_sample = false --满足特定条件才获取下一个sample
+			next_sample = true --满足特定条件才获取下一个sample
 		end
 --[
 		if loop % 2 ==0 then
@@ -348,12 +348,12 @@ end
 for epoch =1,50 do 
 	print('\nTraining in ',epoch,'epoch:')
 	cfg.L2Rate = 0.0001--0.0001*3^epoch
-	local margin={0.003,0.009,0.03,0.1,0.3,1}
+	--local margin={0.003,0.009,0.03,0.1,0.3,1}
 --	local l2={0.0003,0.01,0.03,0.1,0.3,1}
 --	cfg.dict = nil
 --	cfg.lm ={}
 --	cfg.lm = getlm()
-	data_set:resetTrainset(1)
+	data_set:resetTrainset(10)
 	cfg.margin = 0.009
 	cfg.L2Rate = 0.0001
 	print('L2Rate:',cfg.L2Rate)
