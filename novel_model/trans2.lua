@@ -12,7 +12,7 @@ function Trans2: __init(useGPU)
 		emd	= nil,
 		dim	= deep_cqa.config.emd_dim,	--词向量的维度
 		gpu	= useGPU or false,	--是否使用gpu模式
-		margin	= 0.009,
+		margin	= 0.042,
 		l2Rate	= 0.0001,	--L2范式的约束
 		learningRate	= 0.01	--L2范式的约束
 	}	
