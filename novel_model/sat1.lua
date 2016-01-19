@@ -1,16 +1,17 @@
 --[[
-	使用双向lstm验证一下自我attention是否有作用
+	使用双向lstm验证一下bilstm+maxpooling是否有作用
+	单个负样本训练大概需要5小时，每次测试大概需要2个小时
 	autor: liangjz
 	2016-1-18
 --]]
 local Sat1 = torch.class('Sat1')
-function Sat1:__init()
+function Sat1:__init(useGPU)
 	self.cfg = {
 		vecs	= nil,
 		dict	= nil,
 		emd	= nil,
 		dim	= deep_cqa.config.emd_dim,	--词向量的维度
-		mem	= 3,	--Memory的维度
+		mem	= 100,	--Memory的维度
 		gpu	= useGPU or false,	--是否使用gpu模式
 		margin	= 0.009,
 		l2Rate	= 0.0001,	--L2范式的约束
@@ -74,6 +75,18 @@ function Sat1:getLM()
 	lm.qf = nn.CosineDistance()
 	lm.sub = nn.CSubTable()
 	
+	if self.cfg.gpu then
+		lm.qemd:cuda()
+		lm.temd:cuda()
+		lm.femd:cuda()
+		lm.qst:cuda()
+		lm.tas:cuda()
+		lm.fas:cuda()
+		lm.qt:cuda()
+		lm.qf:cuda()
+		lm.sub:cuda()
+	end
+	
 end
 function Sat1:getIndex(sent) --	获取一个句子的索引表达，作为整个模型的输入，可以直接应用到词向量层
 	return deep_cqa.read_one_sentence(sent,self.cfg.dict)
@@ -102,12 +115,15 @@ function Sat1:testLM()
 	
 	local t1 = m1:forward(rep1)
 	local t2 = m2:forward(t1)
+	print('t2',t2)
 	local t3 = m3:forward(t2)
-	print(t3)
+	print('t3',t3)
 	local t4 = m4:forward(t3)
-	print(t4)
+	print('view',t4)
 	local t5 = m5:forward(t4)
+	print('replicate',t5)
 	local t6 = m6:forward(t5)
+	print('maxpooling',t6)
 	local t7 = m7:forward(t6)
 	local t8 = m8:forward({t7,t7})
 
@@ -117,16 +133,14 @@ function Sat1:testLM()
 	print('e2',e2)
 	local e3 = m6:backward(t5,e2)
 	print('e3',e3)
-	local e4 = m5:backward(e3)
+	local e4 = m5:backward(t4,e3)
 	print('e4',e4)
-	local e5 = m4:backward(e4)
+	local e5 = m4:backward(t3,e4)
 	print('e5',e5)
-	local e6 = m3:backward(e5)
-	print('e6',e6)
-	local e7 = m2:backward(e6)
-	print(e7)
-
-	
+	local e6 = m3:backward(t2,e5)
+	print('e6',e6[1],e6[2],e6[3],e6[4],e6[5])
+	local e7 = m2:backward(t1,e6)
+	print('e7',e7)
 --[[
 
 	local r1 = nn.SplitTable(1):forward(rep1)
@@ -174,7 +188,7 @@ function Sat1:train(negativeSize)
 	local right_sample = 0
 	while sample ~= nil do	--数据集跑完？
 		loop = loop + 1
-		if loop %100 ==0 then xlua.progress(self.dataSet.current_train,self.dataSet.train_set.size) end
+		if loop %1 ==0 then xlua.progress(self.dataSet.current_train,self.dataSet.train_set.size) end
 		sample = self.dataSet:getNextPair()
 		if sample == nil then break end	--数据集获取完毕
 		index[1] = self:getIndex(sample[1]):clone()
@@ -201,12 +215,9 @@ function Sat1:train(negativeSize)
 		local rep1 = self.LM.qst:forward(vecs[1])
 		local rep2 = self.LM.tas:forward(vecs[2])
 		local rep3 = self.LM.fas:forward(vecs[3])
-		print(rep1,rep2,rep3)
 		local sc_1 = self.LM.qt:forward({rep1,rep2})
 		local sc_2 = self.LM.qf:forward({rep1,rep3})
 		local pred = self.LM.sub:forward({sc_1,sc_2})	-- 因为是距离参数转换为相似度参数，所以是负样本减正样本
-		print(sc_1[1],sc_2[1],pred[1])
-
 		local err = criterion:forward(pred,gold)
 		sample_count = sample_count + 1
 		if err <= 0 then
@@ -222,17 +233,12 @@ function Sat1:train(negativeSize)
 		self.LM.qemd:zeroGradParameters()
 		self.LM.temd:zeroGradParameters()
 		self.LM.femd:zeroGradParameters()
-		self.LM.qlstm:forget()
-		self.LM.tlstm:forget()
-		self.LM.flstm:forget()
 		
 		local e0 = criterion:backward(pred,gold)
-		e1 = e0  + self.cfg.l2Rate*0.5*params:norm(2)	--二阶范数
+		e1 = e0  + self.cfg.l2Rate*0.5*params:norm()^2	--二阶范数
 		local e2 = self.LM.sub:backward({sc_1,sc_2},e1)
-		print(e2[1],e2[2])
 		local e3 = self.LM.qt:backward({rep1,rep2},e2[1])
 		local e4 = self.LM.qf:backward({rep1,rep3},e2[2])
-		print(e3[1])
 		local e5 = self.LM.qst:backward(vecs[1],(e3[1]+e4[1])/2)
 		local e7 = self.LM.tas:backward(vecs[2],e3[2])
 		local e8 = self.LM.fas:backward(vecs[3],e4[2])
@@ -255,6 +261,102 @@ function Sat1:train(negativeSize)
 		self.LM.femd:updateParameters(learningRate)
 	end
 	print('训练集的准确率：',right_sample/sample_count)
+end
+
+function Sat1:test_one_pair(question_vec,answer_id) 	--给定一个问答pair，计算其相似度	
+	--传入的qst为已经计算好的向量，ans为问题的id
+	local answer_rep = self.dataSet:getAnswerVec(answer_id)	--获取答案的表达
+	--print('ans_rep',answer_id,answer_rep[1][1])
+	if self.cfg.gpu then
+		answer_rep = answer_rep:cuda()
+	end
+	local sim_sc = self.LM.qt:forward({question_vec,answer_rep})
+	return sim_sc[1]
+end
+
+
+function Sat1:evaluate(name)
+	local results = {}	--记录每个测试样本的结果
+	local test_size = 0
+	local loop = 0
+	if name =='dev' then 
+		test_size = self.dataSet.dev_set.size 
+	else
+		test_size = self.dataSet.test_set.size 
+	end
+	print('\nCalculating answers')
+	local answer_pair =self.dataSet:getNextAnswer(true)	--从头开始计算answer的向量
+	while answer_pair~=nil do
+		loop = loop+1
+		xlua.progress(loop,self.dataSet.answer_set.size)
+		local answer = answer_pair[2]	--获取问题内容
+		local word_index = self:getIndex(answer)	--获取词下标
+		if self.cfg.gpu then word_index = word_index:cuda() end
+		local answer_emd = self.LM.temd:forward(word_index):clone()
+		local answer_rep = self.LM.tas:forward(answer_emd):clone()
+		self.dataSet:saveAnswerVec(answer_pair[1],answer_rep)
+		answer_pair = self.dataSet:getNextAnswer()
+	end	
+	collectgarbage() 
+	print('Test process:')
+	local test_pair =nil
+	if name =='dev' then
+		test_pair = self.dataSet:getNextDev(true)
+	else
+		test_pair = self.dataSet:getNextTest(true)
+	end
+	loop = 0
+	while test_pair~=nil do
+		loop = loop+1
+		xlua.progress(loop,test_size)
+
+		local gold = test_pair[1]	--正确答案的集合
+		local qst = test_pair[2]	--问题
+		local candidates = test_pair[3] --候选的答案
+		local qst_idx = self:getIndex(qst)
+		if self.cfg.gpu then qst_idx = qst_idx:cuda() end
+		local qst_emd = self.LM.qemd:forward(qst_idx):clone()
+		local qst_vec = self.LM.qst:forward(qst_emd):clone()
+
+		local sc = {}	
+		local gold_sc ={}
+		local gold_rank = {}
+		
+		for k,c in pairs(gold) do 
+			local score = self:test_one_pair(qst_vec,c)	--标准答案的得分,传入内容为问题的表达和答案的编号
+			gold_sc[k] = score
+			gold_rank[k] = 1	--初始化排名
+		end
+
+		for k,c in pairs(candidates) do 
+			local score = self:test_one_pair(qst_vec,c)
+			for m,n in pairs(gold_sc) do
+				if score > n then
+					gold_rank[m] = gold_rank[m]+1
+				end
+			end
+		end
+		
+		local mark =0.0
+		local mrr = 0
+		for k,c in pairs(gold_rank) do
+			if c==1 then 
+				mark = 1.0
+			end
+			mrr = mrr + 1.0/c
+		end
+		results[loop] = {mrr,mark}
+		if name =='dev' then
+			test_pair = self.dataSet:getNextDev()
+		else
+			test_pair = self.dataSet:getNextTest()
+		end
+
+		if loop%10==0 then collectgarbage() end
+	end
+
+	local results = torch.Tensor(results)
+	print('Results:',torch.sum(results,1)/results:size()[1])
 end
 
 
