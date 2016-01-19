@@ -20,8 +20,7 @@ function deep_cqa.get_sub_embedding()
 	for i =1, dict.size do
 		local w = string.gsub(dict:token(i),'\\','')
 		if emd_dict:contains(w) then
-			vecs[i] = emd_vec[emd_dict:index(w)]:clone()
-			--vecs[i]:uniform(-0.05,0.05)
+			vecs[i] = emd_vec[emd_dict:index(w)]
 		else
 			unseen_count =unseen_count + 1
 			vecs[i]:uniform(-0.05,0.05)

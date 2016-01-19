@@ -12,7 +12,7 @@ function Trans2: __init(useGPU)
 		emd	= nil,
 		dim	= deep_cqa.config.emd_dim,	--词向量的维度
 		gpu	= useGPU or false,	--是否使用gpu模式
-		margin	= 0.042,
+		margin	= 0.009,
 		l2Rate	= 0.0001,	--L2范式的约束
 		learningRate	= 0.01	--L2范式的约束
 	}	
@@ -151,6 +151,12 @@ function Trans2:train(negativeSize)
 		index[1] = self:getIndex(sample[1]):clone()
 		index[2] = self:getIndex(sample[2]):clone()
 		index[3] = self:getIndex(sample[3]):clone()
+		if loop %2==0 then 
+			gold[1]=-1
+			index[2],index[3] = index[3],index[2]
+        else
+			gold[1]=1
+		end
 		if(self.cfg.gpu) then
 			index[1] = index[1]:cuda() 
 		 	index[2] = index[2]:cuda() 
@@ -168,6 +174,7 @@ function Trans2:train(negativeSize)
 		local sc_2 = self.LM.qf:forward({rep1,rep3})
 		local pred = self.LM.sub:forward({sc_1,sc_2})	-- 因为是距离参数转换为相似度参数，所以是负样本减正样本
 		--print(sc_1[1],sc_2[1],pred[1])
+		--pred[1] = pred[1]  + self.cfg.l2Rate*0.5*params:norm()^2	--二阶范
 		local err = criterion:forward(pred,gold)
 		sample_count = sample_count + 1
 		if err <= 0 then
@@ -184,7 +191,7 @@ function Trans2:train(negativeSize)
 		self.LM.femd:zeroGradParameters()				
 
 		local e0 = criterion:backward(pred,gold)
-		e1 = e0  + self.cfg.l2Rate*0.5*params:norm(2)	--二阶范数
+		e1 = e0  + self.cfg.l2Rate*0.5*params:norm()^2	--二阶范
 		local e2 = self.LM.sub:backward({sc_1,sc_2},e1)
 		local e3 = self.LM.qt:backward({rep1,rep2},e2[1])
 		local e4 = self.LM.qf:backward({rep1,rep3},e2[2])

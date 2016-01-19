@@ -11,6 +11,10 @@ print(b)
 print(a:forward(b))
 --]]
 
-local tmp = Trans2(true,1)
+local tmp = Sat1(true)
+--tmp:train(1)
+tmp:testLM()
+--[[
 tmp:train(1)
 tmp:evaluate('dev')
+--]]
