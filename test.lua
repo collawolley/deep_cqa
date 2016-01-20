@@ -1,33 +1,12 @@
-require('.')--[[
-a =nn.Linear(5,5)
-a['weight']:zero()
-a['bias']:zero()
-for i =1,5 do
-	a['weight'][i][i] =1
-end
-print(a['weight'])
-b = torch.Tensor(5):fill(3)
-print(b)
-print(a:forward(b))
---]
-a = torch.Tensor({3,3,3,3,3,3})
-b = nn.View(-1,2)
-c= b:forward(a)
-print(c)
-e = c*0.1
-print(e)
-d = b:backward(a,e)
-print(d)
-
---]]
-
---[
-local tmp = Sat1(true)
---tmp:train(1)
-tmp:evaluate('dev')
---tmp:testLM()
+require('.')
 --[[
+data = torch.rand(2,5)
+print('data',data)
+scale = torch.rand(1,2)
+l = nn.CMul(2,5)
+print(l:forward(data))
+print(l['weight'],l['bias'])
+--]]
+local tmp = Trans3(true)
 tmp:train(1)
 tmp:evaluate('dev')
---]]
-

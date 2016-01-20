@@ -87,6 +87,9 @@ include('util/InsSet.lua')
 include('simple_model/avg_emd.lua')
 include('context_model/co_sim.lua')
 include('novel_model/trans2.lua')
+include('novel_model/trans3.lua')
+include('novel_model/trans4.lua')
+include('novel_model/trans5.lua')
 include('novel_model/sat1.lua')
 
 
