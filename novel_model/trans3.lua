@@ -34,6 +34,7 @@ end
 function Trans3:getLM()	--获取语言模型
 	self.LM ={}	--清空原始的模型
 	local tcov = nn.SpatialConvolution(1,1000,self.cfg.dim,2,1,1,0,1)	--input需要是3维tensor
+	tcov['weight']:uniform(-0.5,0.5)
 	local fcov = tcov:clone('weight','bias')
 	local qcov = tcov:clone('weight','bias')
 -------------------------------------
@@ -158,6 +159,10 @@ function Trans3:train(negativeSize)
 		index[2] = self:getIndex(sample[2]):clone()
 		index[3] = self:getIndex(sample[3]):clone()
 		self.LM.mark['bias']:zero()
+		if loop %200==0 then
+			local tmp = self.LM.mark['weight']
+			print(tmp[1][1],tmp[1][2],tmp[2][1],tmp[2][2])	
+		end
 		if loop %2==0 then 
 			gold[1]=-1
 			index[2],index[3] = index[3],index[2]
