@@ -13,9 +13,9 @@ function Sat1:__init(useGPU)
 		dim	= deep_cqa.config.emd_dim,	--词向量的维度
 		mem	= 100,	--Memory的维度
 		gpu	= useGPU or false,	--是否使用gpu模式
-		margin	= 0.009,
-		l2Rate	= 0.0001,	--L2范式的约束
-		learningRate	= 0.01	--L2范式的约束
+		margin	= 0.1,
+		l2Rate	= 0,	--L2范式的约束
+		learningRate	= 0.1	--L2范式的约束
 	}
 	self.cfg.dict, self.cfg.vecs = deep_cqa.get_sub_embedding()
 	self.cfg.emd = nn.LookupTable(self.cfg.vecs:size(1),self.cfg.dim)
@@ -36,40 +36,33 @@ function Sat1:getLM()
 	lm.temd	= lm.qemd:clone('weight','bias')	--共享权重和偏置
 	lm.femd	= lm.qemd:clone('weight','bias')	--共享权重和偏置
 	
-	local lstm = nn.FastLSTM(cfg.dim,cfg.mem)
-	lm.qlstm = nn.BiSequencer(lstm:clone('weight','bias'),lstm:clone('weight','bias'))
-	lm.tlstm = nn.BiSequencer(lstm:clone('weight','bias'),lstm:clone('weight','bias'))
-	lm.flstm = nn.BiSequencer(lstm:clone('weight','bias'),lstm:clone('weight','bias'))
+	local flstm = nn.FastLSTM(cfg.dim,cfg.mem)
+	local rlstm = nn.FastLSTM(cfg.dim,cfg.mem)
+	lm.qlstm = nn.BiSequencer(flstm:clone('weight','bias'),rlstm:clone('weight','bias'))
+	lm.tlstm = nn.BiSequencer(flstm:clone('weight','bias'),rlstm:clone('weight','bias'))
+	lm.flstm = nn.BiSequencer(flstm:clone('weight','bias'),rlstm:clone('weight','bias'))
+	
+	lm.pip = nn.Sequential()
+	lm.pip:add(nn.JoinTable(1))
+	lm.pip:add(nn.View(-1,cfg.mem*2))
+	lm.pip:add(nn.Replicate(1))
+	lm.pip:add(nn.SpatialAdaptiveMaxPooling(cfg.mem*2,1))
+	lm.pip:add(nn.Reshape(cfg.mem*2))
 
 	lm.qst = nn.Sequential()
-	lm.qst:add(nn.Identity())
 	lm.qst:add(nn.SplitTable(1))
 	lm.qst:add(lm.qlstm)
-	lm.qst:add(nn.JoinTable(1))
-	lm.qst:add(nn.View(-1,cfg.mem*2))
-	lm.qst:add(nn.Replicate(1))
-	lm.qst:add(nn.SpatialAdaptiveMaxPooling(cfg.mem*2,1))
-	lm.qst:add(nn.Reshape(cfg.mem*2))
+	lm.qst:add(lm.pip:clone())
 	
 	lm.tas = nn.Sequential()
-	lm.tas:add(nn.Identity())
 	lm.tas:add(nn.SplitTable(1))
 	lm.tas:add(lm.tlstm)
-	lm.tas:add(nn.JoinTable(1))
-	lm.tas:add(nn.View(-1,cfg.mem*2))
-	lm.tas:add(nn.Replicate(1))
-	lm.tas:add(nn.SpatialAdaptiveMaxPooling(cfg.mem*2,1))
-	lm.tas:add(nn.Reshape(cfg.mem*2))
+	lm.tas:add(lm.pip:clone())
 
 	lm.fas = nn.Sequential()
-	lm.fas:add(nn.Identity())
 	lm.fas:add(nn.SplitTable(1))
 	lm.fas:add(lm.flstm)
-	lm.fas:add(nn.JoinTable(1))
-	lm.fas:add(nn.View(-1,cfg.mem*2))
-	lm.fas:add(nn.Replicate(1))
-	lm.fas:add(nn.SpatialAdaptiveMaxPooling(cfg.mem*2,1))
-	lm.fas:add(nn.Reshape(cfg.mem*2))
+	lm.fas:add(lm.pip:clone())
 
 	lm.qt = nn.CosineDistance()
 	lm.qf = nn.CosineDistance()
