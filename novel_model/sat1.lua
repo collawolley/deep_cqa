@@ -10,9 +10,10 @@ function Sat1:__init(useGPU)
 		vecs	= nil,
 		dict	= nil,
 		emd	= nil,
-		dim	= deep_cqa.config.emd_dim,	--词向量的维度
+		dim	=  deep_cqa.config.emd_dim,	--词向量的维度
 		mem	= 100,	--Memory的维度
 		gpu	= useGPU or false,	--是否使用gpu模式
+		dp = 0.5,
 		margin	= 0.1,
 		l2Rate	= 0,	--L2范式的约束
 		learningRate	= 0.1	--L2范式的约束
@@ -38,10 +39,15 @@ function Sat1:getLM()
 	
 	local flstm = nn.FastLSTM(cfg.dim,cfg.mem)
 	local rlstm = nn.FastLSTM(cfg.dim,cfg.mem)
+	a,b = flstm:getParameters()
+	a:uniform(-0.01,0.01)
+	a,b = rlstm:getParameters()
+	a:uniform(-0.01,0.01)
+
 	lm.qlstm = nn.BiSequencer(flstm:clone('weight','bias'),rlstm:clone('weight','bias'))
 	lm.tlstm = nn.BiSequencer(flstm:clone('weight','bias'),rlstm:clone('weight','bias'))
 	lm.flstm = nn.BiSequencer(flstm:clone('weight','bias'),rlstm:clone('weight','bias'))
-	
+
 	lm.pip = nn.Sequential()
 	lm.pip:add(nn.JoinTable(1))
 	lm.pip:add(nn.View(-1,cfg.mem*2))
@@ -63,10 +69,11 @@ function Sat1:getLM()
 	lm.fas:add(nn.SplitTable(1))
 	lm.fas:add(lm.flstm)
 	lm.fas:add(lm.pip:clone())
-
+	
 	lm.qt = nn.CosineDistance()
 	lm.qf = nn.CosineDistance()
 	lm.sub = nn.CSubTable()
+	lm.dp = nn.Dropout(self.cfg.dp)
 	
 	if self.cfg.gpu then
 		lm.qemd:cuda()
@@ -78,6 +85,7 @@ function Sat1:getLM()
 		lm.qt:cuda()
 		lm.qf:cuda()
 		lm.sub:cuda()
+		lm.dp:cuda()
 	end
 	
 end
@@ -89,18 +97,30 @@ function Sat1:testLM()
 	
 	lstm = nn.FastLSTM(self.cfg.dim,self.cfg.mem)
 	local index1 = self:getIndex('today is a good day'):clone()
-	local index2 = self:getIndex('today is a very good day'):clone()
+	local index2 = self:getIndex('day good a is today'):clone()
 	local index3 = self:getIndex('This class creates an output where the input is replicated'):clone()
 	local rep1 = self.LM.qemd:forward(index1):clone()
 	local rep2 = self.LM.qemd:forward(index2):clone()
 	local rep3 = self.LM.qemd:forward(index3):clone()
+	print(index1,index2)
 	
 	local m1 = nn.SplitTable(1)
+	local m0 = nn.Sequencer(lstm)
+--	local t1 = m1:forward(rep1)
+--	local t2 = m1:forward(rep2)
+--	print(t1[1][1],t2[1][1])
 	local m2 = nn.BiSequencer(lstm,lstm:clone('weight','bias'))
+--	local a0 = m2:forward(t1)
+--	print(t11,t1)
+--	local a1= m0:forward(t1)
+--	print(a1[1],a1[5])
+--	local a2= m0:forward(t2)
+--	print(a2[1],a2[5])
 	local m3 = nn.JoinTable(1)
-	print(m3)
+--	print(a0[1],a0[5])
+--[
 	local m4 = nn.View(-1,cfg.mem*2)
-	print(m4)
+--	print(m4)
 	local m5 = nn.Replicate(1)
 	local m6 = nn.SpatialAdaptiveMaxPooling(cfg.mem*2,1)
 	local m7 = nn.Reshape(cfg.mem*2)
@@ -108,9 +128,9 @@ function Sat1:testLM()
 	
 	local t1 = m1:forward(rep1)
 	local t2 = m2:forward(t1)
-	print('t2',t2)
+--	print('t2',t2)
 	local t3 = m3:forward(t2)
-	print('t3',t3)
+--	print('t3',t3)
 	local t4 = m4:forward(t3)
 	print('view',t4)
 	local t5 = m5:forward(t4)
@@ -118,22 +138,24 @@ function Sat1:testLM()
 	local t6 = m6:forward(t5)
 	print('maxpooling',t6)
 	local t7 = m7:forward(t6)
+	print(t7)
 	local t8 = m8:forward({t7,t7})
 
 	local e1 = m8:backward({t7,t7},torch.Tensor({0.5}))
-	print(e1[1],e1[2])
+--	print(e1[1],e1[2])
 	local e2 = m7:backward(t6,e1[1])
-	print('e2',e2)
+--	print('e2',e2)
 	local e3 = m6:backward(t5,e2)
-	print('e3',e3)
+--	print('e3',e3)
 	local e4 = m5:backward(t4,e3)
-	print('e4',e4)
+--	print('e4',e4)
 	local e5 = m4:backward(t3,e4)
-	print('e5',e5)
+--	print('e5',e5)
 	local e6 = m3:backward(t2,e5)
-	print('e6',e6[1],e6[2],e6[3],e6[4],e6[5])
+--	print('e6',e6[1],e6[2],e6[3],e6[4],e6[5])
 	local e7 = m2:backward(t1,e6)
-	print('e7',e7)
+--	print('e7',e7)
+--]
 --[[
 
 	local r1 = nn.SplitTable(1):forward(rep1)
@@ -165,7 +187,10 @@ function Sat1:train(negativeSize)
 	modules:add(self.LM.qf)
 	modules:add(self.LM.sub)
 	params,grad_params = modules:getParameters()
+	grad_params:zero()
 	
+	self.LM.dp:training()
+
 	local criterion = nn.MarginCriterion(self.cfg.margin)
 	local gold = torch.Tensor({1})
 	if self.cfg.gpu then
@@ -182,23 +207,28 @@ function Sat1:train(negativeSize)
 	while sample ~= nil do	--数据集跑完？
 		loop = loop + 1
 		if loop %1 ==0 then xlua.progress(self.dataSet.current_train,self.dataSet.train_set.size) end
+		if loop > 3000 then break end
 		sample = self.dataSet:getNextPair()
 		if sample == nil then break end	--数据集获取完毕
 		index[1] = self:getIndex(sample[1]):clone()
 		index[2] = self:getIndex(sample[2]):clone()
 		index[3] = self:getIndex(sample[3]):clone()
-		
+		print(index)	
+--[[
 		if loop % 2  == 0 then
 			index[2],index[3] = index[3],index[2]
 			gold[1] = -1
 		else
 			gold[1] = 1
 		end
-
+--]]
+		print(index,gold[1])
+		local mask =torch.ones(self.cfg.mem*2)	--实现统一的dropout
 		if(self.cfg.gpu) then
 			index[1] = index[1]:cuda() 
 		 	index[2] = index[2]:cuda() 
-		 	index[3]= index[3]:cuda() 
+		 	index[3]= index[3]:cuda()
+			mask = mask:cuda()
 		end
 		
 		vecs[1] = self.LM.qemd:forward(index[1]):clone()
@@ -208,10 +238,16 @@ function Sat1:train(negativeSize)
 		local rep1 = self.LM.qst:forward(vecs[1])
 		local rep2 = self.LM.tas:forward(vecs[2])
 		local rep3 = self.LM.fas:forward(vecs[3])
-		local sc_1 = self.LM.qt:forward({rep1,rep2})
-		local sc_2 = self.LM.qf:forward({rep1,rep3})
+		mask = self.LM.dp:forward(mask)
+		local rep4 = rep1:cmul(mask)
+		local rep5 = rep2:cmul(mask)
+		local rep6 = rep3:cmul(mask)
+
+		local sc_1 = self.LM.qt:forward({rep4,rep5})
+		local sc_2 = self.LM.qf:forward({rep4,rep6})
 		local pred = self.LM.sub:forward({sc_1,sc_2})	-- 因为是距离参数转换为相似度参数，所以是负样本减正样本
 		local err = criterion:forward(pred,gold)
+		print('\n',sc_1[1],sc_2[1],pred[1],err,'\n')
 		sample_count = sample_count + 1
 		if err <= 0 then
 			right_sample = right_sample + 1
@@ -230,11 +266,20 @@ function Sat1:train(negativeSize)
 		local e0 = criterion:backward(pred,gold)
 		e1 = e0  + self.cfg.l2Rate*0.5*params:norm()^2	--二阶范数
 		local e2 = self.LM.sub:backward({sc_1,sc_2},e1)
-		local e3 = self.LM.qt:backward({rep1,rep2},e2[1])
-		local e4 = self.LM.qf:backward({rep1,rep3},e2[2])
-		local e5 = self.LM.qst:backward(vecs[1],(e3[1]+e4[1])/2)
-		local e7 = self.LM.tas:backward(vecs[2],e3[2])
-		local e8 = self.LM.fas:backward(vecs[3],e4[2])
+		local e3 = self.LM.qt:backward({rep4,rep5},e2[1])
+		local e4 = self.LM.qf:backward({rep4,rep6},e2[2])
+		local eqst = ((e3[1]+e4[1])/2):cmul(mask)
+		local etas = e3[2]:cmul(mask)
+		local efas = e3[1]:cmul(mask)
+		local e5 = self.LM.qst:backward(vecs[1],eqst)
+		local e7 = self.LM.tas:backward(vecs[2],etas)
+		local e8 = self.LM.fas:backward(vecs[3],efas)
+		local gradnorm = grad_params:norm()
+		print(gradnorm,pred[1],gold[1],e1[1])
+		if gradnorm > 5 then
+		--	grad_params = grad_params*(5/gradnorm)
+		end
+	--	print(grad_params:norm())
 		local learningRate  = self.cfg.learningRate
 		self.LM.sub:updateParameters(learningRate)
 		self.LM.qt:updateParameters(learningRate)
@@ -269,6 +314,7 @@ end
 
 
 function Sat1:evaluate(name)
+	self.LM.dp:evaluate()
 	local results = {}	--记录每个测试样本的结果
 	local test_size = 0
 	local loop = 0

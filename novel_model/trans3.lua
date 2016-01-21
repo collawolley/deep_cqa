@@ -34,7 +34,7 @@ end
 function Trans3:getLM()	--获取语言模型
 	self.LM ={}	--清空原始的模型
 	local tcov = nn.SpatialConvolution(1,1000,self.cfg.dim,2,1,1,0,1)	--input需要是3维tensor
-	tcov['weight']:uniform(-0.5,0.5)
+	tcov['weight']:uniform(-0.05,0.05)
 	local fcov = tcov:clone('weight','bias')
 	local qcov = tcov:clone('weight','bias')
 -------------------------------------

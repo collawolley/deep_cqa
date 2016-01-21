@@ -27,14 +27,14 @@ end
 function getlm()
 	get_index('today is')
 -------------------------------------
-	local hlq = nn.Linear(cfg.dim,cfg.dim)	--转移矩阵
-	hlq['weight']:zero()
-	hlq['bias']:zero()
+	local hlt = nn.Linear(cfg.dim,cfg.dim)	--转移矩阵
+	hlt['weight']:zero()
+	hlt['bias']:zero()
 	for i =1,cfg.dim do
-		hlq['weight'][i][i] =1
+		hlt['weight'][i][i] =1
 	end
-	local hlt = hlq:clone()	--不共享权重和偏移
-	local hlf = hlt:clone('weight','bias')
+	local hlf = hlt:clone('weight','bias')	--不共享权重和偏移
+	local hlq = nn.Identity()
 -------------------------------------
 	--下面是cos sim的计算nn图
 	local m1 = nn.ConcatTable()
@@ -70,10 +70,15 @@ function getlm()
 	lm.qst:add(lm.qemd)
 	lm.tas:add(lm.temd)
 	lm.fas:add(lm.femd)
-
+	
 	lm.qst:add(nn.Identity())	--问题部分的词向量不做转换
 	lm.tas:add(hlt)	--正负答案的部分做词向量转换
-	lm.fas:add(hlf)
+	lm.mark = hlt
+	lm.fas:add(hlf)	
+	lm.qst:add(nn.Tanh())	--问题部分的词向量不做转换
+	lm.tas:add(nn.Tanh())	--正负答案的部分做词向量转换
+	lm.fas:add(nn.Tanh())
+
 	---------------------
 	lm.qt = nn.Sequential()
 	lm.qf = nn.Sequential()
@@ -158,7 +163,7 @@ function train(lr)
 	local right_sample = 0
 	while sample ~= nil do	--数据集跑完？
 		loop = loop + 1
-        if loop %100==0 then print(cfg.lm.mark['weight']) end
+        --if loop %100==0 then print(cfg.lm.mark['weight']) end
 		if loop %100 ==0 then xlua.progress(data_set.current_train,data_set.train_set.size) end
 		if loop%10==0 then collectgarbage() end
 		sample = data_set:getNextPair()
@@ -175,7 +180,7 @@ function train(lr)
 		vecs[1] = lm.qst:forward(index[1]):clone()	--问题的表达
 		vecs[2] = lm.tas:forward(index[2]):clone()	--（正确）答案的表达
 		vecs[3] = lm.fas:forward(index[3]):clone()	--错误答案的表达
-		
+		lm.mark['bias']:zero()
 		local qt_rep = lm.qt:forward({vecs[1],vecs[2]})	--问题和正样本最后的得分
 		local qf_rep = lm.qf:forward({vecs[1],vecs[3]})	--问题和负样本最后的得分
 				
@@ -327,16 +332,16 @@ cfg.lm = getlm()
 
 --[
 --cfg.lm = torch.load('model/cov_sdg2_lc1_1.bin','binary')
-for epoch =1,1 do 
+for epoch =1,5 do 
 	print('\nTraining in ',epoch,'epoch:')
-	local margin={0.0033,0.01,0.033,0.1,0.33,1}
+	local margin={0.01,0.033,0.1,0.33,1}
 --	local l2={0.0003,0.01,0.03,0.1,0.3,1}
 	cfg.dict = nil
 	cfg.lm ={}
 	cfg.lm = getlm()
-	data_set:resetTrainset(10)
-	cfg.margin = 0.42
-	cfg.L2Rate = 0.1
+	data_set:resetTrainset(1)
+	cfg.margin = margin[epoch]
+	cfg.L2Rate = 0.01
 	print('L2Rate:',cfg.L2Rate)
 	print('Margin:',cfg.margin)
 	train()
