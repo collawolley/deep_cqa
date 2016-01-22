@@ -27,7 +27,85 @@ function Sat1:__init(useGPU)
 	self:getLM()
 	self.dataSet = InsSet()	--保险数据集
 end
+function Sat1:share_lstm(m1,m2)	--共享两个lstm单元的权重，不共享梯度，应该由rnn包自身实现
+	--以m2的参数为主,m1向m2靠拢
+	local r1 = m1.recurrentModule
+	local r2 = m2.recurrentModule
+	local s1 = r1:findModules('nn.Linear')
+	local s2 = r2:findModules('nn.Linear')
+	for i,v in pairs(s1) do
+		v:share(s2[i],'weight','bias')
+	end
+	local s3 = r1:findModules('nn.LinearNoBias')
+	local s4 = r2:findModules('nn.LinearNoBias')
+	for i,v in pairs(s3) do
+		v:share(s4[i],'weight','weight')
+	end
+	local s5 = r1:findModules('nn.CMul')
+	local s6 = r2:findModules('nn.CMul')
+	for i,v in pairs(s5) do
+		v:share(s6[i],'weight','weight')
+	end
+end
+function Sat1:syn3lstm(mq,mt,mf)--强行同步三个lstm单元的权重
+	local rq = mq.recurrentModule
+	local rt = mt.recurrentModule
+	local rf = mf.recurrentModule
+	local sq1 = rq:findModules('nn.Linear')
+	local st1 = rt:findModules('nn.Linear')
+	local sf1 = rf:findModules('nn.Linear')
+	for i,v in pairs(sq1) do
+		local sum  = v['weight']*2 + st1[i]['weight'] + sf1[i]['weight']
+		sum = sum/4
+		v['weight'] = sum
+		st1[i]['weight'] =sum
+		sf1[i]['weight'] =sum
+		local bsum  = v['bias']*2 + st1[i]['bias'] + sf1[i]['bias']
+		bsum = bsum/4
+		v['bias'] = bsum
+		st1[i]['bias'] =bsum
+		sf1[i]['bias'] =bsum
+	end
+	local sq2 = rq:findModules('nn.LinearNoBias')
+	local st2 = rt:findModules('nn.LinearNoBias')
+	local sf2 = rf:findModules('nn.LinearNoBias')
+	for i,v in pairs(sq2) do
+		local sum  = v['weight']*2 + st2[i]['weight'] + sf2[i]['weight']
+		sum = sum/4
+		v['weight'] = sum
+		st2[i]['weight'] =sum
+		sf2[i]['weight'] =sum
+	end
+	local sq3 = rq:findModules('nn.CMul')
+	local st3 = rt:findModules('nn.CMul')
+	local sf3 = rf:findModules('nn.CMul')
+	for i,v in pairs(sq3) do
+		local sum  = v['weight']*2 + st3[i]['weight'] + sf3[i]['weight']
+		sum = sum/4
+		v['weight'] = sum
+		st3[i]['weight'] =sum
+		sf3[i]['weight'] =sum
+	end
+end
 
+function Sat1:init_lstm(md)	--初始化lstm单元的参数
+	local m1 = md.recurrentModule
+	local m2 = m1:findModules('nn.Linear')
+	for i,v in pairs(m2) do
+		v['weight']:uniform(-0.01,0.01)
+		v['bias']:uniform(-0.01,0.01)
+	end
+	local m3 = m1:findModules('nn.LinearNoBias')
+	for i,v in pairs(m3) do
+		v['weight']:uniform(-0.01,0.01)
+	end
+	local m4 = m1:findModules('nn.CMul')
+	for i,v in pairs(m4) do
+		v['weight']:uniform(-0.01,0.01)
+	end
+end
+
+	
 function Sat1:getLM()
 	self.LM = {}	-- 清空语言模型
 	lm = self.LM	-- 简写
@@ -37,16 +115,30 @@ function Sat1:getLM()
 	lm.temd	= lm.qemd:clone('weight','bias')	--共享权重和偏置
 	lm.femd	= lm.qemd:clone('weight','bias')	--共享权重和偏置
 	
-	local flstm = nn.FastLSTM(cfg.dim,cfg.mem)
-	local rlstm = nn.FastLSTM(cfg.dim,cfg.mem)
-	a,b = flstm:getParameters()
-	a:uniform(-0.01,0.01)
-	a,b = rlstm:getParameters()
-	a:uniform(-0.01,0.01)
+	local flstm = nn.LSTM(cfg.dim,cfg.mem,200)	--正向序列lstm
+	local rlstm = nn.LSTM(cfg.dim,cfg.mem,200)	--反向序列lstm
+	self:init_lstm(flstm)
+	self:init_lstm(rlstm)
+	
+	local qflstm = flstm:clone()	self:init_lstm(qflstm)
+	local tflstm = flstm:clone()	self:init_lstm(tflstm) 
+	local fflstm = flstm:clone()	self:init_lstm(fflstm)
+	
+	local qrlstm = rlstm:clone()	self:init_lstm(qrlstm)
+	local trlstm = rlstm:clone()	self:init_lstm(trlstm)
+	local frlstm = rlstm:clone()	self:init_lstm(frlstm)
+	lm.qflstm = qflstm
+	lm.tflstm = tflstm
+	lm.fflstm = fflstm
+	self:syn3lstm(lm.qflstm,lm.tflstm,lm.fflstm)
+	lm.qrlstm = qrlstm
+	lm.trlstm = trlstm
+	lm.frlstm = frlstm
+	self:syn3lstm(lm.qrlstm,lm.trlstm,lm.frlstm)
 
-	lm.qlstm = nn.BiSequencer(flstm:clone('weight','bias'),rlstm:clone('weight','bias'))
-	lm.tlstm = nn.BiSequencer(flstm:clone('weight','bias'),rlstm:clone('weight','bias'))
-	lm.flstm = nn.BiSequencer(flstm:clone('weight','bias'),rlstm:clone('weight','bias'))
+	lm.qlstm = nn.BiSequencer(qflstm,qrlstm)
+	lm.tlstm = nn.BiSequencer(tflstm,trlstm)
+	lm.flstm = nn.BiSequencer(fflstm,frlstm)
 
 	lm.pip = nn.Sequential()
 	lm.pip:add(nn.JoinTable(1))
@@ -187,7 +279,6 @@ function Sat1:train(negativeSize)
 	modules:add(self.LM.qf)
 	modules:add(self.LM.sub)
 	params,grad_params = modules:getParameters()
-	grad_params:zero()
 	
 	self.LM.dp:training()
 
@@ -207,22 +298,33 @@ function Sat1:train(negativeSize)
 	while sample ~= nil do	--数据集跑完？
 		loop = loop + 1
 		if loop %1 ==0 then xlua.progress(self.dataSet.current_train,self.dataSet.train_set.size) end
+		collectgarbage() 
 		if loop > 3000 then break end
 		sample = self.dataSet:getNextPair()
 		if sample == nil then break end	--数据集获取完毕
 		index[1] = self:getIndex(sample[1]):clone()
 		index[2] = self:getIndex(sample[2]):clone()
 		index[3] = self:getIndex(sample[3]):clone()
-		print(index)	
 --[[
+		local p1,g1 = self.LM.qflstm:getParameters()
+		local p2,g2 = self.LM.tflstm:getParameters()
+		local p3,g3 = self.LM.fflstm:getParameters()
+		print('start-------------\n')
+		print(p1:size(),p1:sum())
+		print(p2:size(),p2:sum())
+		print(p3:size(),p3:sum())
+		print('end---------------\n')
+--		print(index)	
+--]]
+--[
 		if loop % 2  == 0 then
 			index[2],index[3] = index[3],index[2]
 			gold[1] = -1
 		else
 			gold[1] = 1
 		end
---]]
-		print(index,gold[1])
+--]
+--		print(index,gold[1])
 		local mask =torch.ones(self.cfg.mem*2)	--实现统一的dropout
 		if(self.cfg.gpu) then
 			index[1] = index[1]:cuda() 
@@ -247,12 +349,12 @@ function Sat1:train(negativeSize)
 		local sc_2 = self.LM.qf:forward({rep4,rep6})
 		local pred = self.LM.sub:forward({sc_1,sc_2})	-- 因为是距离参数转换为相似度参数，所以是负样本减正样本
 		local err = criterion:forward(pred,gold)
-		print('\n',sc_1[1],sc_2[1],pred[1],err,'\n')
 		sample_count = sample_count + 1
 		if err <= 0 then
 			right_sample = right_sample + 1
 		end
 		
+		print('\n',sc_1[1],sc_2[1],pred[1],err,right_sample/sample_count,'\n')
 		self.LM.sub:zeroGradParameters()
 		self.LM.qt:zeroGradParameters()
 		self.LM.qf:zeroGradParameters()
@@ -286,10 +388,21 @@ function Sat1:train(negativeSize)
 		self.LM.qf:updateParameters(learningRate)
 		self.LM.qst:updateParameters(learningRate)
 		self.LM.tas:updateParameters(learningRate)
-		self.LM.fas:updateParameters(learningRate)
+		self.LM.fas:updateParameters(learningRate)	
+		self:syn3lstm(self.LM.qflstm,self.LM.tflstm,self.LM.fflstm)
+		self:syn3lstm(self.LM.qrlstm,self.LM.trlstm,self.LM.frlstm)
+
+
 		self.LM.qlstm:forget()
 		self.LM.tlstm:forget()
 		self.LM.flstm:forget()
+		self.LM.qflstm:forget()
+		self.LM.tflstm:forget()
+		self.LM.fflstm:forget()
+		self.LM.qrlstm:forget()
+		self.LM.trlstm:forget()
+		self.LM.frlstm:forget()
+
 		
 		self.LM.qemd:backward(index[1],e5)
 		self.LM.qemd:updateParameters(learningRate)
