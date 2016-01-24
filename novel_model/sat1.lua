@@ -271,6 +271,7 @@ end
 
 function Sat1:train(negativeSize)
 	self.dataSet:resetTrainset(negativeSize)
+--[[
 	local modules = nn.Parallel()
 	modules:add(self.LM.qst)
 	modules:add(self.LM.tas)
@@ -278,8 +279,8 @@ function Sat1:train(negativeSize)
 	modules:add(self.LM.qt)
 	modules:add(self.LM.qf)
 	modules:add(self.LM.sub)
-	params,grad_params = modules:getParameters()
-	
+	--params,grad_params = modules:getParameters()
+	--]]
 	self.LM.dp:training()
 
 	local criterion = nn.MarginCriterion(self.cfg.margin)
@@ -316,14 +317,14 @@ function Sat1:train(negativeSize)
 		print('end---------------\n')
 --		print(index)	
 --]]
---[
+--[[
 		if loop % 2  == 0 then
 			index[2],index[3] = index[3],index[2]
 			gold[1] = -1
 		else
 			gold[1] = 1
 		end
---]
+--]]
 --		print(index,gold[1])
 		local mask =torch.ones(self.cfg.mem*2)	--实现统一的dropout
 		if(self.cfg.gpu) then
@@ -366,7 +367,7 @@ function Sat1:train(negativeSize)
 		self.LM.femd:zeroGradParameters()
 		
 		local e0 = criterion:backward(pred,gold)
-		e1 = e0  + self.cfg.l2Rate*0.5*params:norm()^2	--二阶范数
+		e1 = e0 -- + self.cfg.l2Rate*0.5*params:norm()^2	--二阶范数
 		local e2 = self.LM.sub:backward({sc_1,sc_2},e1)
 		local e3 = self.LM.qt:backward({rep4,rep5},e2[1])
 		local e4 = self.LM.qf:backward({rep4,rep6},e2[2])
@@ -376,11 +377,11 @@ function Sat1:train(negativeSize)
 		local e5 = self.LM.qst:backward(vecs[1],eqst)
 		local e7 = self.LM.tas:backward(vecs[2],etas)
 		local e8 = self.LM.fas:backward(vecs[3],efas)
-		local gradnorm = grad_params:norm()
-		print(gradnorm,pred[1],gold[1],e1[1])
-		if gradnorm > 5 then
+--		local gradnorm = grad_params:norm()
+--		print(gradnorm,pred[1],gold[1],e1[1])
+--		if gradnorm > 5 then
 		--	grad_params = grad_params*(5/gradnorm)
-		end
+--		end
 	--	print(grad_params:norm())
 		local learningRate  = self.cfg.learningRate
 		self.LM.sub:updateParameters(learningRate)

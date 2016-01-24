@@ -91,6 +91,9 @@ include('novel_model/trans3.lua')
 include('novel_model/trans4.lua')
 include('novel_model/trans5.lua')
 include('novel_model/sat1.lua')
+include('novel_model/lstm.lua')
+include('novel_model/bilstm.lua')
+include('novel_model/sat2.lua')
 
 
 --deep_cqa.ins_meth.load_txt_dataset()
@@ -134,3 +137,4 @@ function share_weights(cell, src)	--仅仅共享权重，导数不共享，这�
 		error('parameters cannot be shared for this input')
 	end
 end
+
