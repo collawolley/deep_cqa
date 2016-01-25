@@ -26,7 +26,8 @@ function deep_cqa.get_sub_embedding()
 			vecs[i]:uniform(-0.05,0.05)
 		end
 	end
-	print('unseen words count:',unseen_count,dict.size)
+	print('Word Embedding Load Over ...')
+--	print('unseen words count:',unseen_count,dict.size)
 	emd_vec = nil
 	emd_dict = nil
 	return dict,vecs

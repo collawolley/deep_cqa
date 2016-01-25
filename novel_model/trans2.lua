@@ -89,6 +89,8 @@ function Trans2:getLM()	--获取语言模型
 		self.LM.qf:cuda()
 		self.LM.sub:cuda()
 	end
+	self.LM.temd:share(self.LM.qemd,'weight','bias')
+	self.LM.femd:share(self.LM.qemd,'weight','bias')
 end
 ------------------------
 
@@ -129,7 +131,8 @@ function Trans2:train(negativeSize)
 	modules:add(self.LM.qf)
 	modules:add(self.LM.sub)
 	params,grad_params = modules:getParameters()
-
+	self.LM.tas:share(self.LM.qst,'weight','bias','gradWeight','gradBias')
+	self.LM.fas:share(self.LM.qst,'weight','bias','gradWeight','gradBias')
 	local criterion = nn.MarginCriterion(self.cfg.margin)
 	local gold = torch.Tensor({1})
 	if self.cfg.gpu then
@@ -151,12 +154,14 @@ function Trans2:train(negativeSize)
 		index[1] = self:getIndex(sample[1]):clone()
 		index[2] = self:getIndex(sample[2]):clone()
 		index[3] = self:getIndex(sample[3]):clone()
+	--[[
 		if loop %2==0 then 
 			gold[1]=-1
 			index[2],index[3] = index[3],index[2]
         else
 			gold[1]=1
 		end
+--]]
 		if(self.cfg.gpu) then
 			index[1] = index[1]:cuda() 
 		 	index[2] = index[2]:cuda() 
@@ -165,6 +170,16 @@ function Trans2:train(negativeSize)
 		vecs[1] = self.LM.qemd:forward(index[1]):clone()
 		vecs[2] = self.LM.temd:forward(index[2]):clone()
 		vecs[3] = self.LM.femd:forward(index[3]):clone()	
+	--[[	p1,g1 = self.LM.fas:parameters()
+		p2,g2 = self.LM.tas:parameters()
+		for i,v in pairs(p1) do
+			if i==2 then 
+				print(v)
+				print(p2[i])
+			end
+		end
+		print('==============')
+--]]
 		
 		local rep1 = self.LM.qst:forward(vecs[1])
 		local rep2 = self.LM.tas:forward(vecs[2])
@@ -173,23 +188,14 @@ function Trans2:train(negativeSize)
 		local sc_1 = self.LM.qt:forward({rep1,rep2})
 		local sc_2 = self.LM.qf:forward({rep1,rep3})
 		local pred = self.LM.sub:forward({sc_1,sc_2})	-- 因为是距离参数转换为相似度参数，所以是负样本减正样本
-		--print(sc_1[1],sc_2[1],pred[1])
 		--pred[1] = pred[1]  + self.cfg.l2Rate*0.5*params:norm()^2	--二阶范
 		local err = criterion:forward(pred,gold)
 		sample_count = sample_count + 1
 		if err <= 0 then
 			right_sample = right_sample + 1
 		end
-		self.LM.sub:zeroGradParameters()
-		self.LM.qt:zeroGradParameters()
-		self.LM.qf:zeroGradParameters()
-		self.LM.qst:zeroGradParameters()
-		self.LM.tas:zeroGradParameters()
-		self.LM.fas:zeroGradParameters()
-		self.LM.qemd:zeroGradParameters()
-		self.LM.temd:zeroGradParameters()
-		self.LM.femd:zeroGradParameters()				
-
+		print(pred[1],gold[1],err,right_sample/sample_count)
+	
 		local e0 = criterion:backward(pred,gold)
 		e1 = e0  + self.cfg.l2Rate*0.5*params:norm()^2	--二阶范
 		local e2 = self.LM.sub:backward({sc_1,sc_2},e1)
@@ -202,18 +208,28 @@ function Trans2:train(negativeSize)
 		local e8 = self.LM.fas:backward(vecs[3],e4[2])
 		local learningRate  = self.cfg.learningRate
 		self.LM.sub:updateParameters(learningRate)
+		self.LM.sub:zeroGradParameters()
+
 		self.LM.qt:updateParameters(learningRate)
+		self.LM.qt:zeroGradParameters()
 		self.LM.qf:updateParameters(learningRate)
+		self.LM.qf:zeroGradParameters()
 		self.LM.qst:updateParameters(learningRate)
+		self.LM.qst:zeroGradParameters()
 		self.LM.tas:updateParameters(learningRate)
+		self.LM.tas:zeroGradParameters()
 		self.LM.fas:updateParameters(learningRate)
+		self.LM.fas:zeroGradParameters()
 
 		self.LM.qemd:backward(index[1],e5)
 		self.LM.qemd:updateParameters(learningRate)
+		self.LM.qemd:zeroGradParameters()
 		self.LM.temd:backward(index[2],e7)
 		self.LM.temd:updateParameters(learningRate)
+		self.LM.temd:zeroGradParameters()
 		self.LM.femd:backward(index[3],e8)
 		self.LM.femd:updateParameters(learningRate)
+		self.LM.femd:zeroGradParameters()				
 	end
 	print('训练集的准确率：',right_sample/sample_count)
 end

@@ -163,14 +163,14 @@ function Sat:train(negativeSize)
 		index[1] = self:getIndex(sample[1]):clone()
 		index[2] = self:getIndex(sample[2]):clone()
 		index[3] = self:getIndex(sample[3]):clone()
---[[
+--[
 		if loop % 2  == 0 then
 			index[2],index[3] = index[3],index[2]
 			gold[1] = -1
 		else
 			gold[1] = 1
 		end
---]]
+--]
 		local mask =torch.ones(self.cfg.mem*2)	--实现统一的dropout
 		if(self.cfg.gpu) then
 			index[1] = index[1]:cuda() 
