@@ -15,17 +15,17 @@ config = {}
 -------------------------------
 config.parent_path = lfs.currentdir() .. '/'
 --------词向量配置
---[[	--性能最好的词向量
+--[	--性能最好的词向量
 config.emd_vec = config.parent_path .. 'data/glove/glove.840B.300d.th'
 config.emd_dict = config.parent_path .. 'data/glove/glove.840B.vocab'
 config.emd_dim = 300
---]]
+--]
 -------
---[
+--[[
 config.emd_vec = config.parent_path .. 'data/word2vec/Google_300.vec'
 config.emd_dict = config.parent_path .. 'data/word2vec/Google_300.dict'
 config.emd_dim = 300
---]
+--]]
 -----
 --[[
 config.emd_vec = config.parent_path .. 'data/word2vec/SG_10.vec'
