@@ -95,6 +95,7 @@ include('novel_model/lstm.lua')
 include('novel_model/bilstm.lua')
 include('novel_model/sat2.lua')
 include('novel_model/sat3.lua')
+include('novel_model/wm1.lua')
 
 
 --deep_cqa.ins_meth.load_txt_dataset()
