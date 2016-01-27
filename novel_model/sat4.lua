@@ -1,9 +1,9 @@
 --[[
-	使用rnn库实现bilstm,主要目标，解决参数同步问题
+	在bilstm上添加自我attention的参数
 	autor: liangjz
 	2016-1-24
 --]]
-local Sat = torch.class('Sat3')
+local Sat = torch.class('Sat4')
 function Sat:__init(useGPU)
 	self.cfg = {
 		vecs	= nil,
