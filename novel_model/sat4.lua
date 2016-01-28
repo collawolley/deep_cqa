@@ -10,7 +10,7 @@ function Sat:__init(useGPU)
 		dict	= nil,
 		emd	= nil,
 		dim	=  deep_cqa.config.emd_dim,	--词向量的维度
-		mem	= 100,	--Memory的维度
+		mem	= 5,	--Memory的维度
 		gpu	= useGPU or false,	--是否使用gpu模式
 		dp = 0.5,
 		margin	= 0.1,
@@ -24,7 +24,7 @@ function Sat:__init(useGPU)
 	
 	self.LM = {}
 	self:getLM()
-	self.dataSet = InsSet()	--保险数据集
+--	self.dataSet = InsSet()	--保险数据集
 	print('Dataset Load Over ...')
 end
 function Sat:getLM()
@@ -43,17 +43,43 @@ function Sat:getLM()
 	lm.pip:add(nn.Replicate(1))
 	lm.pip:add(nn.SpatialAdaptiveMaxPooling(cfg.mem*2,1))
 	lm.pip:add(nn.Reshape(cfg.mem*2))
-
+	lm.max= {}
 	for i = 1,3 do	
 		lm.emd[i] = cfg.emd:clone('weight','bias')
-		lm.bilstm[i] = nn.BiSequencer(lm.lstm:clone(),lm.lstm:clone())
+		lm.bilstm[i] = nn.BiSequencer(lm.lstm:clone(),lm.lstm:clone(),3)
 		lm.bilstm[i]:zeroGradParameters()
 		lm.bilstm[i]:remember('both')
+
 		lm.rep[i] = nn.Sequential()
 		lm.rep[i]:add(nn.SplitTable(1))
 		lm.rep[i]:add(lm.bilstm[i])
-		lm.rep[i]:add(lm.pip:clone())
+		lm.rep[i]:add(nn.JoinTable(1))
+		lm.rep[i]:add(nn.View(-1,2,cfg.mem))
+		lm.rep[i]:add(nn.SplitTable(2))	--这个这个时候的输出为{n*dim,n*dim},将正反两个序列完全分开了
+		lm.max[i] = lm.pip:clone()
+	
 	end
+	lm.diff = {}
+	lm.diffWeight = {}
+	lm.join1 = {}
+	lm.join2 = {}
+	lm.join3 = {}
+	lm.wordWeight ={}	
+	lm.zoom = {}
+	lm.scale = {}
+	for i = 1,3 do
+		lm.diff[2*i-1] = nn.MM(false,false)	--正向序列求差
+		lm.diff[2*i] = nn.MM(false,false)	--反向序列求差
+		lm.diffWeight[2*i-1] = nil
+		lm.diffWeight[2*i] = nil
+		lm.join1[i] = nn.JoinTable(2)	--将正反序列进行拼接
+		lm.join2[2*i-1] = nn.Concat():add(nn.Identity()):add(nn.Identity())	--正反序列差补全
+		lm.join3[i] = nn.JoinTable(2)	--正反序列的差补全
+		lm.wordWeight[i] = nn.CosineDistance()	--根据相似性计算权重
+		lm.zoom[i] = nn.MM()	--通过给不同timestep的矩阵左乘对角矩阵，来完成对向量表达的缩放
+		lm.scale[i] = nil	--空的对角矩阵，到时候根据具体情况进行填充
+	end
+	
 	lm.cosine = {}
 	lm.cosine[1] = nn.CosineDistance()
 	lm.cosine[2] = nn.CosineDistance()
@@ -61,12 +87,18 @@ function Sat:getLM()
 	lm.dp = nn.Dropout(self.cfg.dp)
 	
 	if self.cfg.gpu then
-		lm.emd[1]:cuda()
-		lm.emd[2]:cuda()
-		lm.emd[3]:cuda()
-		lm.rep[1]:cuda()
-		lm.rep[2]:cuda()
-		lm.rep[3]:cuda()
+		for i =1,3 do
+			lm.emd[i]:cuda()
+			lm.rep[i]:cuda()
+			lm.max[i]:cuda()
+			lm.diff[2*i-1]:cuda()
+			lm.diff[2*i]:cuda()
+			lm.join1[i]:cuda()
+			lm.join2[i]:cuda()
+			lm.join3[i]:cuda()
+			lm.wordWeight[i]:cuda()
+			lm.zoom[i]:cuda()
+		end
 		lm.cosine[1]:cuda()
 		lm.cosine[2]:cuda()
 		lm.sub:cuda()
@@ -94,41 +126,75 @@ function Sat:getIndex(sent) --	获取一个句子的索引表达，作为整个�
 end
 
 function Sat:testLM()
-	local brnn = self.LM.bilstm[1]
-	local brnn2 = self.LM.bilstm[2]
-  	local inputs, gradOutputs = {}, {}
-   	local inputs2, gradOutputs2 = {}, {}
-	for loop =1,3 do
-		nStep =3
-		nStep = nStep + loop
-		for i=1,nStep do
-      		inputs[i] = torch.randn(self.cfg.dim)
-			inputs2[i] = torch.randn(self.cfg.dim)
-      		gradOutputs[i] = torch.randn(self.cfg.mem*2)
-		  	gradOutputs2[i] = torch.randn(self.cfg.mem*2)+loop
-   		end
-   		local outputs = brnn:forward(inputs)
-		local outputs2 = brnn2:forward(inputs2)
-   		local gradInputs = brnn:backward(inputs, gradOutputs)
-   		local gradInputs2= brnn2:backward(inputs2, gradOutputs2)
-   -- params
-   		local params, gradParams = brnn:parameters()
-  		local params2, gradParams2 = brnn2:parameters()
-   
-   -- updateParameters
-		brnn:updateParameters(0.1)
-   		brnn2:updateParameters(0.1)
-   		brnn:zeroGradParameters()
-   		brnn2:zeroGradParameters()
-		for i,param in pairs(params) do
-			if i< 3 then
-				print(param)
-				print(params2[i])
-			end
-   		end
-	print('------------')
+	msg = 'today is a good day !' 
+	idx =  self:getIndex(msg)
+	vec = self.LM.emd[1]:forward(idx):clone()
+	o1 =  self.LM.rep[1]:forward(vec)
+	self.LM.bilstm[1]:forget()
+--	o2 = self.LM.base[1]:forward(vec)
+--	self.LM.bilstm[1]:forget()
+	for i,v in pairs(o1) do
+		print(v)
 	end
+--[[
+	for i,v in pairs(o2) do
+		print(v)
+	end
+	print(o2)
+--]]
+	print(idx:size(),'sentence length')
+	self.LM.diffWeight[1] =  torch.Tensor(idx:size()[1]-1,idx:size()[1]):zero()
+	self.LM.diffWeight[2] =  torch.Tensor(idx:size()[1]-1,idx:size()[1]):zero()
+	for i = 1,idx:size()[1]-1 do --构造
+		self.LM.diffWeight[1][i][i] = 1
+		self.LM.diffWeight[1][i][i+1] = -1	
+		self.LM.diffWeight[2][i][i] = -1
+		self.LM.diffWeight[2][i][i+1] = 1
+	end
+	print('fsubw',self.LM.diffWeight[1])
+	print('rsubw',self.LM.diffWeight[2])
+	local j1 = self.LM.join1[1]:forward(o1)
+	print('join1',j1)
+	sub ={}
+	for i =1,2 do
+		sub[i] = self.LM.diff[i]:forward({self.LM.diffWeight[i],o1[i]})
+	end
+	print(sub[1])
+	print(sub[2])
+	
+	
+	
 end
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 function Sat:train(negativeSize)
 	self.dataSet:resetTrainset(negativeSize)

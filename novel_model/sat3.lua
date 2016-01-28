@@ -85,6 +85,15 @@ function Sat:getLM()
 		self.LM.emd[i]:zeroGradParameters()
 		self.LM.bilstm[i]:forget()
 	end
+	local params= {}
+	local grad_params= {}
+	for i = 1,3 do
+		params[i],grad_params[i] = self.LM.bilstm[i]:parameters()
+		for j,p in pairs(params[i]) do
+			p:uniform(0,0.1)
+		end
+	end
+
 
 
 	
@@ -132,16 +141,7 @@ end
 
 function Sat:train(negativeSize)
 	self.dataSet:resetTrainset(negativeSize)
-	local params= {}
-	local grad_params= {}
-	for i = 1,3 do
-		params[i],grad_params[i] = self.LM.bilstm[i]:parameters()
-		for j,p in pairs(params[i]) do
-			p:uniform(0,0.1)
-		end
-	end
-
-	self.LM.dp:training()
+		self.LM.dp:training()
 
 	local criterion = nn.MarginCriterion(self.cfg.margin)
 	local gold = torch.Tensor({1})
@@ -192,7 +192,7 @@ function Sat:train(negativeSize)
 			self.LM.bilstm[2]:forget()
 			self.LM.bilstm[3]:forget()
 		else
-					--print('\n',pred[1],gold[1],err,right_sample/sample_count)
+			--print('\n',pred[1],gold[1],err,right_sample/loop)
 			local epred = criterion:backward(pred,gold)
 			local esub = epred 	--此处留二阶范数的约束空
 			local ecosine = self.LM.sub:backward(score,esub)
