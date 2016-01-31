@@ -48,8 +48,8 @@ function Trans2:getLM()	--获取语言模型
 	
 	for i = 1,3 do
 		lm.emd[i] = self.cfg.emd:clone()
-		lm.conv[i] = nn.SpatialConvolution(1,1000,self.cfg.dim,2,1,1,0,1)	--input需要是3维tensor
-		lm.linear[i] = nn.LinearNoBias(self.cfg.dim,self.cfg.dim)
+		lm.conv[i] = nn.SpatialConvolution(1,1000,200,2,1,1,0,1)	--input需要是3维tensor
+		lm.linear[i] = nn.Linear(self.cfg.dim,200)
 
 		lm.rep[i] = nn.Sequential()
 		lm.rep[i]:add(lm.linear[i])
@@ -76,6 +76,14 @@ function Trans2:getLM()	--获取语言模型
 		lm.rep[i]:share(lm.rep[1],'weight','bias','gradWeight','gradBias')
 --		lm.linear[i]:share(lm.linear[1],'weight','bias','gradWeight','gradBias')
 	end
+	self.LM.sub:zeroGradParameters()
+	self.LM.cosine[1]:zeroGradParameters()
+	self.LM.cosine[2]:zeroGradParameters()
+	for i = 1,3 do
+		self.LM.emd[i]:zeroGradParameters()
+		self.LM.rep[i]:zeroGradParameters()
+	end
+
 --[[
 	for i =1,self.cfg.dim do
 		self.LM.linear[1]['weight'][i][i] = 1
@@ -114,20 +122,22 @@ function Trans2:train(negativeSize)
 	local cosine ={}	--存储两个句子之间的相似度
 	local loop = 0
 	local right_sample = 0
---[[
-	local p = {}
-	local g ={}
-	for i = 1,3 do 
-		p[i],g[i] = self.LM.linear[i]:parameters()
-	end
-
---]]
 	while sample ~= nil do	--数据集跑完？	
 		loop = loop + 1
 		if loop %100 ==0 then xlua.progress(self.dataSet.current_train,self.dataSet.train_set.size) end
 		sample = self.dataSet:getNextPair()
 		if sample == nil then break end	--数据集获取完毕
-		
+--[
+	local p = {}
+	local g ={}
+	for i = 1,3 do 
+		p[i],g[i] = self.LM.rep[i]:parameters()
+	end
+	for i,v in pairs(p[1]) do
+--		print((v-p[2][i]):norm())
+	end
+--]
+	
 		for i =1,3 do
 			index[i] = self:getIndex(sample[i]):clone()
 			if self.cfg.gpu then
@@ -145,15 +155,7 @@ function Trans2:train(negativeSize)
 		end
 		local e0 = criterion:backward(pred,gold)
 		e1 = e0 + self.cfg.l2*0.5*params:norm()^2	--二阶范
-		
-		self.LM.sub:zeroGradParameters()
-		self.LM.cosine[1]:zeroGradParameters()
-		self.LM.cosine[2]:zeroGradParameters()
-		for i = 1,3 do
-			self.LM.emd[i]:zeroGradParameters()
-			self.LM.rep[i]:zeroGradParameters()
-		end
-
+			
 		local esub= self.LM.sub:backward(cosine,e1)
 		local ecosine = {}
 		ecosine[1] = self.LM.cosine[1]:backward({rep[1],rep[2]},esub[1])
@@ -166,7 +168,11 @@ function Trans2:train(negativeSize)
 		for  i = 1,3 do
 			erep[i] = self.LM.rep[i]:backward(vecs[i],erep1[i])
 			self.LM.emd[i]:backward(index[i],erep[i])
+		--	print(g[1][1][1][1])
+		--	print(g[2][1][1][1])
+		--	print(g[3][1][1][1])
 		end
+--	print('####')
 		local lr  = self.cfg.lr
 		self.LM.sub:updateParameters(lr)
 		self.LM.cosine[1]:updateParameters(lr)
@@ -174,9 +180,15 @@ function Trans2:train(negativeSize)
 		for i = 1,3 do
 			self.LM.emd[i]:updateParameters(lr)
 			self.LM.rep[i]:updateParameters(lr)
+		end		
+		self.LM.sub:zeroGradParameters()
+		self.LM.cosine[1]:zeroGradParameters()
+		self.LM.cosine[2]:zeroGradParameters()
+		for i = 1,3 do
 			self.LM.emd[i]:zeroGradParameters()
 			self.LM.rep[i]:zeroGradParameters()
 		end
+
 	end
 	print('训练集的准确率：',right_sample/loop)
 end

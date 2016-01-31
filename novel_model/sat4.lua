@@ -64,6 +64,7 @@ function Sat:getLM()
 	lm.join1 = {}
 	lm.join2 = {}
 	lm.join3 = {}
+	lm.join4 = {}
 	lm.wordWeight ={}	
 	lm.zoom = {}
 	lm.scale = {}
@@ -73,8 +74,10 @@ function Sat:getLM()
 		lm.diffWeight[2*i-1] = nil
 		lm.diffWeight[2*i] = nil
 		lm.join1[i] = nn.JoinTable(2)	--将正反序列进行拼接
-		lm.join2[2*i-1] = nn.Concat():add(nn.Identity()):add(nn.Identity())	--正反序列差补全
+		lm.join2[2*i-1] = nn.JoinTable(1) --正反序列差补全
+		lm.join2[2*i] = nn.JoinTable(1) --正反序列差补全
 		lm.join3[i] = nn.JoinTable(2)	--正反序列的差补全
+		lm.join4[i] = nn.JoinTable(2)	--正反序列的差补全
 		lm.wordWeight[i] = nn.CosineDistance()	--根据相似性计算权重
 		lm.zoom[i] = nn.MM()	--通过给不同timestep的矩阵左乘对角矩阵，来完成对向量表达的缩放
 		lm.scale[i] = nil	--空的对角矩阵，到时候根据具体情况进行填充
@@ -94,8 +97,10 @@ function Sat:getLM()
 			lm.diff[2*i-1]:cuda()
 			lm.diff[2*i]:cuda()
 			lm.join1[i]:cuda()
-			lm.join2[i]:cuda()
+			lm.join2[2*i-1]:cuda()
+			lm.join2[2*i]:cuda()
 			lm.join3[i]:cuda()
+			lm.join4[i]:cida()
 			lm.wordWeight[i]:cuda()
 			lm.zoom[i]:cuda()
 		end
@@ -146,10 +151,10 @@ function Sat:testLM()
 	self.LM.diffWeight[1] =  torch.Tensor(idx:size()[1]-1,idx:size()[1]):zero()
 	self.LM.diffWeight[2] =  torch.Tensor(idx:size()[1]-1,idx:size()[1]):zero()
 	for i = 1,idx:size()[1]-1 do --构造
-		self.LM.diffWeight[1][i][i] = 1
-		self.LM.diffWeight[1][i][i+1] = -1	
-		self.LM.diffWeight[2][i][i] = -1
-		self.LM.diffWeight[2][i][i+1] = 1
+		self.LM.diffWeight[1][i][i] = -1
+		self.LM.diffWeight[1][i][i+1] = 1	
+		self.LM.diffWeight[2][i][i] = 1
+		self.LM.diffWeight[2][i][i+1] = -1
 	end
 	print('fsubw',self.LM.diffWeight[1])
 	print('rsubw',self.LM.diffWeight[2])
@@ -159,10 +164,20 @@ function Sat:testLM()
 	for i =1,2 do
 		sub[i] = self.LM.diff[i]:forward({self.LM.diffWeight[i],o1[i]})
 	end
-	print(sub[1])
-	print(sub[2])
+--	print(sub[1])
+--	print(sub[2])
+	local j2 = {}
+--	print(sub[1],sub[2],sub[2][1])
+	j2[1] = self.LM.join2[1]:forward({sub[2][1]:resize(1,5),sub[1]})
+	j2[2] = self.LM.join2[2]:forward({sub[2],sub[1][5]:resize(1,5)})
 	
-	
+	print(j2[1])
+	print(j2[2])
+	j3 = self.LM.join3[1]:forward({j2[1],j2[2]})
+	print(j3)
+	print(o1)
+	j4 = self.LM.join4[1]:forward({o1[1][6]:resize(1,5),o1[2][1]:resize(1,5)})
+	print(j4)
 	
 end
 
