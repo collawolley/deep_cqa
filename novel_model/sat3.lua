@@ -92,11 +92,7 @@ function Sat:getLM()
 		for j,p in pairs(params[i]) do
 			p = p:uniform(-0.01,0.01) 	-- ndeel some little trick
 		end
-	end
-
-
-
-	
+	end	
 end
 function Sat:getIndex(sent) --	获取一个句子的索引表达，作为整个模型的输入，可以直接应用到词向量层
 	return deep_cqa.read_one_sentence(sent,self.cfg.dict)
@@ -141,7 +137,7 @@ end
 
 function Sat:train(negativeSize)
 	self.dataSet:resetTrainset(negativeSize)
-		self.LM.dp:training()
+	self.LM.dp:training()
 
 	local criterion = nn.MarginCriterion(self.cfg.margin)
 	local gold = torch.Tensor({1})
@@ -191,6 +187,7 @@ function Sat:train(negativeSize)
 			self.LM.bilstm[1]:forget()
 			self.LM.bilstm[2]:forget()
 			self.LM.bilstm[3]:forget()
+			--print('right sample',loop)
 		else
 			--print('\n',pred[1],gold[1],err,right_sample/loop)
 			local epred = criterion:backward(pred,gold)

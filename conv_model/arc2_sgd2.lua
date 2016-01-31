@@ -130,6 +130,8 @@ function train()
 	modules:add(lm.fq)
 	modules:add(lm.sub)
 	params,grad_params = modules:getParameters()
+	lm.qst:share(lm.tas,'weight','bias','gradWeight','gradBias')
+	lm.fas:share(lm.tas,'weight','bias','gradWeight','gradBias')
 
 	local criterion = nn.MarginCriterion(cfg.margin)
 	local gold = torch.Tensor({1})
@@ -353,14 +355,17 @@ for epoch =1,50 do
 --	cfg.dict = nil
 --	cfg.lm ={}
 --	cfg.lm = getlm()
-	data_set:resetTrainset(10)
+	data_set:resetTrainset(50)
+	if epoch >1 then
+		data_set:resetTrainset(2)
+	end
 	cfg.margin = 0.009
 	cfg.L2Rate = 0.0001
 	print('L2Rate:',cfg.L2Rate)
 	print('Margin:',cfg.margin)
 	train()
 	--cfg.lm = torch.load('model/cov_sdg2_lc2_' .. epoch ..'.bin','binary')
-	torch.save('model/cov_sdg2_lc10_' .. epoch ..'.bin',cfg.lm,'binary')
+--	torch.save('model/cov_sdg2_lc10_' .. epoch ..'.bin',cfg.lm,'binary')
 	evaluate('dev')
 --	cfg.margin = cfg.margin*3
 end
