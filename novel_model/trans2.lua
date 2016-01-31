@@ -14,7 +14,7 @@ function Trans2: __init(useGPU)
 		gpu	= useGPU or false,	--是否使用gpu模式
 		margin	= 0.009,
 		l2	= 0.0001,	--L2范式的约束
-		lr	= 0.01	--L2范式的约束
+		lr	= 0.01	--学习率
 	}	
 	self.cfg.dict, self.cfg.vecs = deep_cqa.get_sub_embedding()
 	self.cfg.emd = nn.LookupTable(self.cfg.vecs:size(1),self.cfg.dim)
@@ -48,8 +48,8 @@ function Trans2:getLM()	--获取语言模型
 	
 	for i = 1,3 do
 		lm.emd[i] = self.cfg.emd:clone()
-		lm.conv[i] = nn.SpatialConvolution(1,1000,self.cfg.dim,2,1,1,0,1)	--input需要是3维tensor
-		lm.linear[i] = nn.LinearNoBias(self.cfg.dim,self.cfg.dim)
+		lm.conv[i] = nn.SpatialConvolution(1,1000,200,2,1,1,0,1)	--input需要是3维tensor
+		lm.linear[i] = nn.LinearNoBias(self.cfg.dim,200)
 
 		lm.rep[i] = nn.Sequential()
 		lm.rep[i]:add(lm.linear[i])
@@ -77,9 +77,18 @@ function Trans2:getLM()	--获取语言模型
 --		lm.linear[i]:share(lm.linear[1],'weight','bias','gradWeight','gradBias')
 	end
 --[[
-	for i =1,self.cfg.dim do
-		self.LM.linear[1]['weight'][i][i] = 1
+	local p = {}
+	local g ={}
+	for i = 1,3 do 
+		p[i],g[i] = self.LM.linear[i]:parameters()
 	end
+	for i,v in pairs(p[1]) do
+		v:uniform(-0.001,0.001)
+		for j= 1,self.cfg.dim do
+			v[i][i] = 1
+		end
+	end
+
 --]]
 end
 ------------------------
@@ -100,6 +109,11 @@ function Trans2:train(negativeSize)
 		md:add(self.LM.rep[i])
 	end
 	params,gradParams = md:getParameters()
+	for i=2,3 do
+		self.LM.emd[i]:share(self.LM.emd[1],'weight','bias')
+		self.LM.rep[i]:share(self.LM.rep[1],'weight','bias','gradWeight','gradBias')
+--		lm.linear[i]:share(lm.linear[1],'weight','bias','gradWeight','gradBias')
+	end
 
 	local criterion = nn.MarginCriterion(self.cfg.margin)
 	local gold = torch.Tensor({1})
@@ -114,14 +128,6 @@ function Trans2:train(negativeSize)
 	local cosine ={}	--存储两个句子之间的相似度
 	local loop = 0
 	local right_sample = 0
---[[
-	local p = {}
-	local g ={}
-	for i = 1,3 do 
-		p[i],g[i] = self.LM.linear[i]:parameters()
-	end
-
---]]
 	while sample ~= nil do	--数据集跑完？	
 		loop = loop + 1
 		if loop %100 ==0 then xlua.progress(self.dataSet.current_train,self.dataSet.train_set.size) end
