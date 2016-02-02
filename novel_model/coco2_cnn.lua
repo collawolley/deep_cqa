@@ -1,10 +1,10 @@
 --[[
-	CNN结构2的类实现,训练coco数据集
+	CNN结构2的类实现,训练coco2数据集
 	author:	liangjz
 	time:	2015-02-01
 --]]
 --------------------
-local Coco = torch.class('CocoCNN')
+local Coco = torch.class('Coco2CNN')
 function Coco: __init(useGPU)
 	self.cfg = {	--配置文件
 		vecs	= nil,
@@ -14,7 +14,7 @@ function Coco: __init(useGPU)
 		gpu	= useGPU or false,	--是否使用gpu模式
 		margin	= 0.009,
 		l2	= 0.0001,	--L2范式的约束
-		lr	=  0.01	--学习率
+		lr	=  0.1	--学习率a
 	}	
 	self.cfg.dict, self.cfg.vecs = deep_cqa.get_sub_embedding()
 	self.cfg.emd = nn.LookupTable(self.cfg.vecs:size(1),self.cfg.dim)
@@ -22,7 +22,7 @@ function Coco: __init(useGPU)
 	self.cfg.vecs = nil
 	self.LM = {}	--语言模型
 	self:getLM()	--生成语言模型
-	self.dataSet = CocoSet()	--保险数据集，这里载入是为了获得测试集和答案
+	self.dataSet = CocoSet2()	--保险数据集，这里载入是为了获得测试集和答案
 end	
 -----------------------
 
@@ -140,8 +140,9 @@ function Coco:train(negativeSize)
 		loop = loop + 1
 		if loop %100 ==0 then xlua.progress(self.dataSet.current_train,self.dataSet.trainSize) end
 		sample = self.dataSet:getNextPair()
+		--print(sample)
 		if sample == nil then break end	--数据集获取完毕
-		print(sample)
+	--	print(sample)
 --[
 		local p = {}
 		local g ={}
@@ -207,6 +208,7 @@ end
 function Coco:testOnePair(question_vec,answer_id) 	--给定一个问答pair，计算其相似度	
 	--传入的qst为已经计算好的向量，ans为问题的id
 	local ans = self.dataSet:getAnswer(answer_id)
+--	print(answer_id,ans)
 	local idx = self:getIndex(ans)
 	if self.cfg.gpu then idx = idx:cuda() end
 	local ans_emd = self.LM.emd[2]:forward(idx):clone()
@@ -233,6 +235,7 @@ function Coco:evaluate(name)	--评估训练好的模型的精度，top 1是正�
 	end
 	loop = 0
 	while test_pair~=nil do
+	--	print(test_pair)
 		loop = loop+1
 		xlua.progress(loop,test_size)
 		local gold = test_pair[1]	--正确答案的集合

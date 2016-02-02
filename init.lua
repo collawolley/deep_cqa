@@ -69,6 +69,7 @@ config.insurance.negative_size =1
 -------------
 config.coco ={}
 config.coco.corp = 'data/coco/coco_corp.bin'
+config.coco.corp2 = 'data/coco/coco_randm_corp.bin'
 -------------
 config.batch_size = 5
 config.random_seed =134
@@ -88,6 +89,7 @@ include('util/emd.lua')
 include('util/read_data.lua')
 include('util/InsSet.lua')
 include('util/CocoSet.lua')
+include('util/CocoSet2.lua')
 include('simple_model/avg_emd.lua')
 include('context_model/co_sim.lua')
 include('novel_model/trans2.lua')
@@ -102,6 +104,7 @@ include('novel_model/sat3.lua')
 include('novel_model/sat4.lua')
 include('novel_model/wm1.lua')
 include('novel_model/coco_cnn.lua')
+include('novel_model/coco2_cnn.lua')
 
 
 --deep_cqa.ins_meth.load_txt_dataset()

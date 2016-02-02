@@ -134,7 +134,10 @@ function Trans5:train(negativeSize)
 	modules:add(self.LM.qf)
 	modules:add(self.LM.sub)
 	params,grad_params = modules:getParameters()
-
+	self.LM.temd:share(self.LM.qemd,'weight','bias')
+	self.LM.femd:share(self.LM.qemd,'weight','bias')
+	self.LM.tas:share(self.LM.qst,'weight','bias','gradWeight','gradBias')
+	self.LM.fas:share(self.LM.qst,'weight','bias','gradWeight','gradBias')
 	local criterion = nn.MarginCriterion(self.cfg.margin)
 	local gold = torch.Tensor({1})
 	if self.cfg.gpu then

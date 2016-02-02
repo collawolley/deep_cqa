@@ -122,9 +122,9 @@ function Trans:train(negativeSize)
 	params,gradParams = md:getParameters()
 	for i=2,3 do
 		self.LM.emd[i]:share(self.LM.emd[1],'weight','bias')
-		self.LM.conv[i]:share(self.LM.conv[1],'weight','bias')
+		self.LM.conv[i]:share(self.LM.conv[1],'weight','bias','gradWeight','gradBias')
 	end
-	self.LM.linear[3]:share(self.LM.linear[2],'weight','bias')
+	self.LM.linear[3]:share(self.LM.linear[2],'weight','bias','gradWeight','gradBias')
 	self.LM.sub:zeroGradParameters()
 	self.LM.cosine[1]:zeroGradParameters()
 	self.LM.cosine[2]:zeroGradParameters()
