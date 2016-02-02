@@ -179,6 +179,8 @@ function Trans4:train(negativeSize)
 		criterion:cuda()
 		gold = gold:cuda()
 	end
+	self.LM.temd:share(self.LM.qemd,'weight','bias')
+	self.LM.femd:share(self.LM.qemd,'weight','bias')
 	self.LM.tas1:share(self.LM.qst1,'weight','bias','gradWeight','gradBias')
 	self.LM.fas1:share(self.LM.qst1,'weight','bias','gradWeight','gradBias')
 	self.LM.tas2:share(self.LM.qst2,'weight','bias','gradWeight','gradBias')
