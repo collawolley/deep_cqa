@@ -179,6 +179,10 @@ function Trans4:train(negativeSize)
 		criterion:cuda()
 		gold = gold:cuda()
 	end
+	self.LM.tas1:share(self.LM.qst1,'weight','bias','gradWeight','gradBias')
+	self.LM.fas1:share(self.LM.qst1,'weight','bias','gradWeight','gradBias')
+	self.LM.tas2:share(self.LM.qst2,'weight','bias','gradWeight','gradBias')
+	self.LM.fas2:share(self.LM.qst2,'weight','bias','gradWeight','gradBias')
 	local sample =1	--占个坑
 	local vecs={}	--存储词向量
 	local index ={}	--存储字符下标

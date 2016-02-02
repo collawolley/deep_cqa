@@ -14,7 +14,7 @@ function Coco: __init(useGPU)
 		gpu	= useGPU or false,	--是否使用gpu模式
 		margin	= 0.009,
 		l2	= 0.0001,	--L2范式的约束
-		lr	= 0.01	--学习率
+		lr	=  0.01	--学习率
 	}	
 	self.cfg.dict, self.cfg.vecs = deep_cqa.get_sub_embedding()
 	self.cfg.emd = nn.LookupTable(self.cfg.vecs:size(1),self.cfg.dim)
@@ -118,8 +118,7 @@ function Coco:train(negativeSize)
 	params,gradParams = md:getParameters()
 	for i=2,3 do
 		self.LM.emd[i]:share(self.LM.emd[1],'weight','bias')
-		self.LM.rep[i]:share(self.LM.rep[1],'weight','bias','gradWeight','gradBias')
---		lm.linear[i]:share(lm.linear[1],'weight','bias','gradWeight','gradBias')
+		self.LM.rep[i]:share(self.LM.rep[1],'weight','bias')
 	end
 
 	local criterion = nn.MarginCriterion(self.cfg.margin)
@@ -128,6 +127,7 @@ function Coco:train(negativeSize)
 		criterion:cuda()
 		gold = gold:cuda()
 	end
+
 	local sample =1	--占个坑
 	local index = {}	--存储字符下标
 	local vecs={}	--存储词向量
@@ -135,23 +135,22 @@ function Coco:train(negativeSize)
 	local cosine ={}	--存储两个句子之间的相似度
 	local loop = 0
 	local right_sample = 0
+
 	while sample ~= nil do	--数据集跑完？	
 		loop = loop + 1
 		if loop %100 ==0 then xlua.progress(self.dataSet.current_train,self.dataSet.trainSize) end
 		sample = self.dataSet:getNextPair()
-	--	print(sample)
 		if sample == nil then break end	--数据集获取完毕
 --[
-	local p = {}
-	local g ={}
-	for i = 1,3 do 
-		p[i],g[i] = self.LM.rep[i]:parameters()
-	end
-	for i,v in pairs(p[1]) do
---		print((v-p[2][i]):norm())
-	end
+		local p = {}
+		local g ={}
+		for i = 1,3 do 
+			p[i],g[i] = self.LM.rep[i]:parameters()
+		end
+		for i,v in pairs(p[1]) do
+	--		print((v-p[2][i]):norm())
+		end
 --]
-	
 		for i =1,3 do
 			index[i] = self:getIndex(sample[i]):clone()
 			if self.cfg.gpu then
@@ -182,11 +181,7 @@ function Coco:train(negativeSize)
 		for  i = 1,3 do
 			erep[i] = self.LM.rep[i]:backward(vecs[i],erep1[i])
 			self.LM.emd[i]:backward(index[i],erep[i])
-		--	print(g[1][1][1][1])
-		--	print(g[2][1][1][1])
-		--	print(g[3][1][1][1])
 		end
---	print('####')
 		local lr  = self.cfg.lr
 		self.LM.sub:updateParameters(lr)
 		self.LM.cosine[1]:updateParameters(lr)

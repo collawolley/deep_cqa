@@ -27,14 +27,14 @@ end
 function getlm()
 	get_index('today is')
 -------------------------------------
-	local hlt = nn.Linear(cfg.dim,cfg.dim)	--转移矩阵
-	hlt['weight']:zero()
-	hlt['bias']:zero()
+	local lm = {}	--待返回的语言模型
+	lm.hlt = nn.LinearNoBias(cfg.dim,cfg.dim)	--转移矩阵
+	lm.hlt['weight']:zero()
 	for i =1,cfg.dim do
-		hlt['weight'][i][i] =1
+		lm.hlt['weight'][i][i] =1
 	end
-	local hlf = hlt:clone('weight','bias')	--不共享权重和偏移
-	local hlq = nn.Identity()
+	lm.hlf = lm.hlt:clone('weight','bias')	--不共享权重和偏移
+	lm.hlq = nn.Identity()
 -------------------------------------
 	--下面是cos sim的计算nn图
 	local m1 = nn.ConcatTable()
@@ -59,11 +59,10 @@ function getlm()
 	-- cos 相似度模块构建完成
 -------------------------------------
 
-	local lm = {}	--待返回的语言模型
-	lm.mark = hlt
+	lm.mark = lm.hlt
 	lm.qemd = cfg.emd	--词嵌入部分
-	lm.temd = lm.qemd:clone('weight','bias')
-	lm.femd = lm.qemd:clone('weight','bias')
+	lm.temd = lm.qemd:clone()
+	lm.femd = lm.qemd:clone()
 	lm.qst = nn.Sequential()
 	lm.tas = nn.Sequential()
 	lm.fas = nn.Sequential()
@@ -72,9 +71,8 @@ function getlm()
 	lm.fas:add(lm.femd)
 	
 	lm.qst:add(nn.Identity())	--问题部分的词向量不做转换
-	lm.tas:add(hlt)	--正负答案的部分做词向量转换
-	lm.mark = hlt
-	lm.fas:add(hlf)	
+	lm.tas:add(lm.hlt)	--正负答案的部分做词向量转换
+	lm.fas:add(lm.hlf)	
 	lm.qst:add(nn.Tanh())	--问题部分的词向量不做转换
 	lm.tas:add(nn.Tanh())	--正负答案的部分做词向量转换
 	lm.fas:add(nn.Tanh())
@@ -144,6 +142,12 @@ function train(lr)
 	modules:add(lm.qf)
 	modules:add(lm.sub)
 	params,grad_params = modules:getParameters()
+	
+	--共享参数
+	lm.temd:share(lm.qemd,'weight','bias')
+	lm.femd:share(lm.qemd,'weight','bias')
+	lm.hlf:share(lm.hlt,'weight','bias')
+	--
 
 	local criterion = nn.MarginCriterion(cfg.margin)
 	local gold = torch.Tensor({1})
@@ -180,7 +184,6 @@ function train(lr)
 		vecs[1] = lm.qst:forward(index[1]):clone()	--问题的表达
 		vecs[2] = lm.tas:forward(index[2]):clone()	--（正确）答案的表达
 		vecs[3] = lm.fas:forward(index[3]):clone()	--错误答案的表达
-		lm.mark['bias']:zero()
 		local qt_rep = lm.qt:forward({vecs[1],vecs[2]})	--问题和正样本最后的得分
 		local qf_rep = lm.qf:forward({vecs[1],vecs[3]})	--问题和负样本最后的得分
 				
@@ -332,18 +335,18 @@ cfg.lm = getlm()
 
 --[
 --cfg.lm = torch.load('model/cov_sdg2_lc1_1.bin','binary')
-for epoch =1,5 do 
+for epoch =1,10 do
 	print('\nTraining in ',epoch,'epoch:')
-	local margin={0.01,0.033,0.1,0.33,1}
+	--local margin={0.01,0.033,0.1,0.33,1}
 --	local l2={0.0003,0.01,0.03,0.1,0.3,1}
-	cfg.dict = nil
-	cfg.lm ={}
-	cfg.lm = getlm()
+--	cfg.dict = nil
+--	cfg.lm ={}
+--	cfg.lm = getlm()
 	data_set:resetTrainset(1)
-	cfg.margin = margin[epoch]
-	cfg.L2Rate = 0.01
-	print('L2Rate:',cfg.L2Rate)
-	print('Margin:',cfg.margin)
+	cfg.margin = 0.09
+	cfg.L2Rate = 0.0001
+--	print('L2Rate:',cfg.L2Rate)
+--	print('Margin:',cfg.margin)
 	train()
 	--cfg.lm = torch.load('model/cov_sdg2_lc9_' .. epoch ..'.bin','binary')
 	--torch.save('model/cov_sdg2_lc8_' .. epoch ..'.bin',cfg.lm,'binary')

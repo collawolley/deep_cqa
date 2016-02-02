@@ -6,9 +6,9 @@
 local Coco = torch.class('CocoSet')	--保险语料库的读取warper
 function Coco:__init(negativeSize)
 	self.corp = torch.load(deep_cqa.config.coco.corp)
-	self.trainSize = 8000 --#self.corp.trainid	--82783最多
+	self.trainSize = 20000 --#self.corp.trainid	--82783最多
 	if self.trainSize > 82783 then self.trainSize = 82783 end
-	self.valSize  = 3000
+	self.valSize  = 1000
 	self.testSize = 1000
 	if self.valSize+self.testSize > 30000 then self.valSize = 10000 self.testSize = 20000 end
 	self.indices = torch.randperm(#self.corp.trainid)

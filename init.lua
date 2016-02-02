@@ -67,6 +67,9 @@ config.insurance.dict = config.parent_path .. 'data/insurance_qa/' .. 'dict.txt'
 config.insurance.binary = config.parent_path .. 'data/insurance_qa/' .. 'full_dataset.bin'
 config.insurance.negative_size =1
 -------------
+config.coco ={}
+config.coco.corp = 'data/coco/coco_corp.bin'
+-------------
 config.batch_size = 5
 config.random_seed =134
 config.stop_words = 'data/context/stop_words.tab'
@@ -84,6 +87,7 @@ include('util/vocab.lua')
 include('util/emd.lua')
 include('util/read_data.lua')
 include('util/InsSet.lua')
+include('util/CocoSet.lua')
 include('simple_model/avg_emd.lua')
 include('context_model/co_sim.lua')
 include('novel_model/trans2.lua')
@@ -97,6 +101,7 @@ include('novel_model/sat2.lua')
 include('novel_model/sat3.lua')
 include('novel_model/sat4.lua')
 include('novel_model/wm1.lua')
+include('novel_model/coco_cnn.lua')
 
 
 --deep_cqa.ins_meth.load_txt_dataset()
