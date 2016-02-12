@@ -156,7 +156,7 @@ function Sat:train(negativeSize)
 	local right_sample = 0	--正确样本计数
 	while sample ~= nil do	--数据集跑完？
 		loop = loop + 1
-		if loop %1 ==0 then xlua.progress(self.dataSet.current_train,self.dataSet.train_set.size) end
+--		if loop %1 ==0 then xlua.progress(self.dataSet.current_train,self.dataSet.train_set.size) end
 		sample = self.dataSet:getNextPair()
 		if sample == nil then break end	--数据集获取完毕
 		for i =1,3 do
@@ -255,7 +255,7 @@ function Sat:evaluate(name)
 --[
 	while answer_pair~=nil do
 		loop = loop+1
-		xlua.progress(loop,self.dataSet.answer_set.size)
+--		xlua.progress(loop,self.dataSet.answer_set.size)
 		local answer = answer_pair[2]	--获取问题内容
 --[
 		local word_index = self:getIndex(answer)	--获取词下标
@@ -280,7 +280,7 @@ function Sat:evaluate(name)
 	loop = 0
 	while test_pair~=nil do
 		loop = loop+1
-		xlua.progress(loop,test_size)
+--		xlua.progress(loop,test_size)
 
 		local gold = test_pair[1]	--正确答案的集合
 		local qst = test_pair[2]	--问题
