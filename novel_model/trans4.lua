@@ -2,10 +2,11 @@
 	给词向量的表达加tf-idf
 	author:	liangjz
 	time:	2015-01-19
+	mdifiy: 2016-2-3
 --]]
 --------------------
-local Trans4 = torch.class('Trans4')
-function Trans4: __init(useGPU)
+local Trans = torch.class('Trans4')
+function Trans: __init(useGPU)
 	self.cfg = {	--配置文件
 		vecs	= nil,
 		dict	= nil,
@@ -13,8 +14,8 @@ function Trans4: __init(useGPU)
 		dim	= deep_cqa.config.emd_dim,	--词向量的维度
 		gpu	= useGPU or false,	--是否使用gpu模式
 		margin	= 0.009,
-		l2Rate	= 0.0001,	--L2范式的约束
-		learningRate	= 0.01	--L2范式的约束
+		l2	= 0.0001,	--L2范式的约束
+		lr	= 0.01	--L2范式的约束
 	}	
 	self.cfg.dict, self.cfg.vecs = deep_cqa.get_sub_embedding()
 	self.cfg.emd = nn.LookupTable(self.cfg.vecs:size(1),self.cfg.dim)
@@ -34,6 +35,15 @@ end
 
 function Trans4:getLM()	--获取语言模型
 	self.LM ={}	--清空原始的模型
+	local lm = self.LM
+	lm.conv = {}
+	lm.linear = {}
+	lm.emd = {}
+	lm.mm = {}
+	lm.rep1 = {}
+	lm.rep2 = {}
+	lm.cosine = {}
+	lm.sub = nil
 	local tcov = nn.SpatialConvolution(1,1000,200,2,1,1,0,1)	--input需要是3维tensor
 	local fcov = tcov:clone('weight','bias')
 	local qcov = tcov:clone('weight','bias')
@@ -43,67 +53,34 @@ function Trans4:getLM()	--获取语言模型
 	pt:add(nn.Reshape(1000))
 	pt:add(nn.Tanh())
 -------------------------------------
-	local hlt =  nn.Linear(self.cfg.dim,200)
-	local hlf = hlt:clone('weight','bias')
-	local hlq = hlt:clone('weight','bias')
--------------------------------------
-	self.LM.qemd = self.cfg.emd	--词嵌入部分
-	self.LM.temd = self.LM.qemd:clone('weight','bias')
-	self.LM.femd = self.LM.qemd:clone('weight','bias')
-
-	self.LM.qst1 = nn.Sequential()
-	self.LM.tas1 = nn.Sequential()
-	self.LM.fas1 = nn.Sequential()
-	
-	self.LM.qst2 = nn.Sequential()
-	self.LM.tas2 = nn.Sequential()
-	self.LM.fas2 = nn.Sequential()
-	
-	self.LM.qm = nn.MM()
-	self.LM.tm = nn.MM()
-	self.LM.fm = nn.MM()
-
-	self.LM.qst1:add(hlq)
-	self.LM.tas1:add(hlt)
-	self.LM.fas1:add(hlf)
-	---------------------
-	self.LM.qst1:add(nn.Tanh())
-	self.LM.tas1:add(nn.Tanh())
-	self.LM.fas1:add(nn.Tanh())
-	---------------------
-	self.LM.qst2:add(nn.Replicate(1))
-	self.LM.tas2:add(nn.Replicate(1))
-	self.LM.fas2:add(nn.Replicate(1))
-	---------------------
-	self.LM.qst2:add(qcov)
-	self.LM.tas2:add(tcov)
-	self.LM.fas2:add(fcov)
-	---------------------
-	self.LM.qst2:add(pt:clone())
-	self.LM.tas2:add(pt:clone())
-	self.LM.fas2:add(pt:clone())
+	for i =1,3 do 
+		lm.emd[i] = self.cfg.emd:clone()
+		lm.linear[i] = nn.Linear(self.cfg.dim,200)
+		lm.conv[i] = nn.SpatialConvolution(1,1000,200,2,1,1,0,1)	--input需要是3维tensor
+		lm.mm[i] = nn.MM()
+		lm.rep1[i] = nn.Sequential()
+		lm.rep2[i] = nn.Sequential()	
+		lm.rep1[i]:add(lm.linear[i])
+		lm.rep1[i]:add(nn.Tanh())
+		lm.rep2[i]:add(nn.Replicate(1))
+		lm.rep2[i]:add(lm.conv[i])
+		lm.rep2[i]:add(pt:clone())
+	end
 	----------------------
-	self.LM.qt = nn.CosineDistance()	--nn包里的cosine distance实际上计算方式为wiki的cosine similarity
-	self.LM.qf = nn.CosineDistance()
-	self.LM.sub = nn.CSubTable()
+	lm.cosine[1] = nn.CosineDistance()	--nn包里的cosine distance实际上计算方式为wiki的cosine similarity
+	lm.cosine[2] = nn.CosineDistance()
+	lm.sub = nn.CSubTable()
 	----------------------
 	if self.cfg.gpu then
-		self.LM.qemd:cuda()
-		self.LM.temd:cuda()
-		self.LM.femd:cuda()
-		self.LM.qst1:cuda()
-		self.LM.tas1:cuda()
-		self.LM.fas1:cuda()
-		self.LM.qst2:cuda()
-		self.LM.tas2:cuda()
-		self.LM.fas2:cuda()
-		self.LM.qt:cuda()
-		self.LM.qf:cuda()
-		self.LM.sub:cuda()
-
-		self.LM.qm:cuda()
-		self.LM.tm:cuda()
-		self.LM.fm:cuda()
+		for i =1,3 do
+			lm.emd[i]:cuda()
+			lm.mm[i]:cuda()
+			lm.rep1[i]:cuda()
+			lm.rep2[i]:cuda()
+		end
+		lm.cosine[1]:cuda()
+		lm.cosine[2]:cuda()
+		lm.sub:cuda()
 	end
 end
 ------------------------
@@ -114,25 +91,6 @@ function Trans4:testLM()	--应用修改模型后测试模型是否按照预期�
 	local index1 = self.getIndex('today is a good day'):clone()
 	local index2 = self.getIndex('today is a very good day'):clone()
 	local index3 = self.getIndex('This class creates an output where the input is replicated'):clone()
-	if cfg.gpu then
-		criterion:cuda()
-		gold =gold:cuda()
-		index1 = index1:cuda()
-		index2 = index2:cuda()
-		index3 = index3:cuda()
-	end
-	local vec1 = self.LM.qemd:forward(index1):clone()
-	local vec2 = self.LM.temd:forward(index2):clone()
-	local vec3 = self.LM.femd:forward(index3):clone()
-	
-	local hl = nn.Linear(cfg.dim,200)
-	local q =  self.LM.qst:forward(vec1)
-	local t =  self.LM.tas:forward(vec2)
-	local f =  self.LM.fas:forward(vec3)
-	local qt = self.LM.qt:forward({q,t})
-	local qf = self.LM.qf:forward({q,f})
-	local sub = self.LM.sub:forward({qf,qt})
-	print(qt,qf,sub)
 end
 --------------------------
 function Trans4:getWeight(indcs)	--获取对角矩阵，对应元素为权重
@@ -162,157 +120,118 @@ end
 function Trans4:train(negativeSize)
 	self.dataSet:resetTrainset(negativeSize)	--设置训练集中每次选取负样本的数量
 	local modules = nn.Parallel()
-	modules:add(self.LM.qst1)
-	modules:add(self.LM.tas1)
-	modules:add(self.LM.fas1)
-	modules:add(self.LM.qst2)
-	modules:add(self.LM.tas2)
-	modules:add(self.LM.fas2)
-	modules:add(self.LM.qt)
-	modules:add(self.LM.qf)
-	modules:add(self.LM.sub)
+	for i =1,3 do
+		modules:add(self.LM.rep1[i])
+		modules:add(self.LM.rep2[i])
+	end
 	params,grad_params = modules:getParameters()
-	
+	for i =2,3 do
+		self.LM.emd[i]:share(self.LM.emd[1],'weight','bias')
+		self.LM.rep1[i]:share(self.LM.rep1[1],'weight','bias','gradWeight','gradBias')
+		self.LM.rep2[i]:share(self.LM.rep2[1],'weight','bias','gradWeight','gradBias')
+	end
 	local criterion = nn.MarginCriterion(self.cfg.margin)
 	local gold = torch.Tensor({1})
 	if self.cfg.gpu then
 		criterion:cuda()
 		gold = gold:cuda()
 	end
-	self.LM.temd:share(self.LM.qemd,'weight','bias')
-	self.LM.femd:share(self.LM.qemd,'weight','bias')
-	self.LM.tas1:share(self.LM.qst1,'weight','bias','gradWeight','gradBias')
-	self.LM.fas1:share(self.LM.qst1,'weight','bias','gradWeight','gradBias')
-	self.LM.tas2:share(self.LM.qst2,'weight','bias','gradWeight','gradBias')
-	self.LM.fas2:share(self.LM.qst2,'weight','bias','gradWeight','gradBias')
+
 	local sample =1	--占个坑
 	local vecs={}	--存储词向量
 	local index ={}	--存储字符下标
 	local wws = {}	--word weights
+	local rep1 = {}
+	local rep2 = {}
+	local rep3 = {}
+	local cos = {}
 	local loop = 0
 
-	local sample_count = 0
 	local right_sample = 0
 	while sample ~= nil do	--数据集跑完？
 		loop = loop + 1
 		if loop %100 ==0 then xlua.progress(self.dataSet.current_train,self.dataSet.train_set.size) end
 		sample = self.dataSet:getNextPair()
 		if sample == nil then break end	--数据集获取完毕
-		index[1] = self:getIndex(sample[1]):clone()
-		index[2] = self:getIndex(sample[2]):clone()
-		index[3] = self:getIndex(sample[3]):clone()
+		for i =1,3 do 
+			index[i] = self:getIndex(sample[i]):clone()
+		end
 		if loop %2==0 then 
 			gold[1]=-1
 			index[2],index[3] = index[3],index[2]
         else
 			gold[1]=1
 		end
+
 		wws = {}
 		for i=1,3 do
 			wws[i] = self:getWeight(index[i]:clone()):clone()
+			if self.cfg.gpu then
+				index[i] = index[i]:cuda() 
+				wws[i] = wws[i]:cuda()
+			end
+			vecs[i] = self.LM.emd[i]:forward(index[i]):clone()
+			rep1[i] = self.LM.rep1[i]:forward(vecs[i])
+			rep2[i] = self.LM.mm[i]:forward({wws[i],rep1[i]})
+			rep3[i] = self.LM.rep2[i]:forward(rep2[i])
 		end
-		if(self.cfg.gpu) then
-			index[1] = index[1]:cuda() 
-		 	index[2] = index[2]:cuda() 
-		 	index[3]= index[3]:cuda() 
-
-			wws[1]= wws[1]:cuda()
-			wws[2]= wws[2]:cuda()
-			wws[3]= wws[3]:cuda()
-		end
-		vecs[1] = self.LM.qemd:forward(index[1]):clone()
-		vecs[2] = self.LM.temd:forward(index[2]):clone()
-		vecs[3] = self.LM.femd:forward(index[3]):clone()	
-		
-		local rep1 = self.LM.qst1:forward(vecs[1])
-		local rep2 = self.LM.tas1:forward(vecs[2])
-		local rep3 = self.LM.fas1:forward(vecs[3])
-		local rep4 = self.LM.qm:forward({wws[1],rep1})
-		local rep5 = self.LM.tm:forward({wws[2],rep2})
-		local rep6 = self.LM.fm:forward({wws[3],rep3})
-
-		local rep7 = self.LM.qst2:forward(rep4)
-		local rep8 = self.LM.tas2:forward(rep5)
-		local rep9 = self.LM.fas2:forward(rep6)
-		
-
-
-		local sc_1 = self.LM.qt:forward({rep7,rep8})
-		local sc_2 = self.LM.qf:forward({rep7,rep9})
-		local pred = self.LM.sub:forward({sc_1,sc_2})	-- 因为是距离参数转换为相似度参数，所以是负样本减正样本
-		--print(sc_1[1],sc_2[1],pred[1])
-		--pred[1] = pred[1]  + self.cfg.l2Rate*0.5*params:norm()^2	--二阶范
+		cos[1] = self.LM.cosine[1]:forward({rep3[1],rep3[2]})
+		cos[2] = self.LM.cosine[2]:forward({rep3[1],rep3[3]})
+		local pred = self.LM.sub:forward(cos)
 		local err = criterion:forward(pred,gold)
-		sample_count = sample_count + 1
 		if err <= 0 then
 			right_sample = right_sample + 1
 		end
 		self.LM.sub:zeroGradParameters()
-		self.LM.qt:zeroGradParameters()
-		self.LM.qf:zeroGradParameters()
-		self.LM.qst1:zeroGradParameters()
-		self.LM.tas1:zeroGradParameters()
-		self.LM.fas1:zeroGradParameters()
-		self.LM.qst2:zeroGradParameters()
-		self.LM.tas2:zeroGradParameters()
-		self.LM.fas2:zeroGradParameters()
-		self.LM.qm:zeroGradParameters()
-		self.LM.tm:zeroGradParameters()
-		self.LM.fm:zeroGradParameters()
-		self.LM.qemd:zeroGradParameters()
-		self.LM.temd:zeroGradParameters()
-		self.LM.femd:zeroGradParameters()				
-
+		self.LM.cosine[1]:zeroGradParameters()
+		self.LM.cosine[2]:zeroGradParameters()
+		for i  = 1,3 do
+			self.LM.rep1[i]:zeroGradParameters()
+			self.LM.rep2[i]:zeroGradParameters()
+			self.LM.mm[i]:zeroGradParameters()
+			self.LM.emd[i]:zeroGradParameters()
+		end
 		local e0 = criterion:backward(pred,gold)
-		e1 = e0  + self.cfg.l2Rate*0.5*params:norm()^2	--二阶范
-		local e2 = self.LM.sub:backward({sc_1,sc_2},e1)
-		local e3 = self.LM.qt:backward({rep7,rep8},e2[1])
-		local e4 = self.LM.qf:backward({rep7,rep9},e2[2])
-		
-		local e5 = self.LM.qst2:backward(rep4,(e3[1]+e4[1])/2)
-		local e6 = self.LM.tas2:backward(rep5,e3[2])
-		local e7 = self.LM.fas2:backward(rep6,e4[2])
-
-		local e8 = self.LM.qm:backward({wws[1],rep1},e5)
-		local e9 = self.LM.tm:backward({wws[2],rep2},e6)
-		local e10 = self.LM.fm:backward({wws[3],rep3},e7)
-		
-		local e11 = self.LM.qst1:backward(vecs[1],e8[2])
-		local e12 = self.LM.tas1:backward(vecs[2],e9[2])
-		local e13 = self.LM.fas1:backward(vecs[3],e10[2])
-		
-		local learningRate  = self.cfg.learningRate
-		self.LM.sub:updateParameters(learningRate)
-		self.LM.qt:updateParameters(learningRate)
-		self.LM.qf:updateParameters(learningRate)
-
-		self.LM.qst1:updateParameters(learningRate)
-		self.LM.tas1:updateParameters(learningRate)
-		self.LM.fas1:updateParameters(learningRate)
-		
-		self.LM.qst2:updateParameters(learningRate)
-		self.LM.tas2:updateParameters(learningRate)
-		self.LM.fas2:updateParameters(learningRate)
-
-		self.LM.qemd:backward(index[1],e11)
-		self.LM.qemd:updateParameters(learningRate)
-		self.LM.temd:backward(index[2],e12)
-		self.LM.temd:updateParameters(learningRate)
-		self.LM.femd:backward(index[3],e13)
-		self.LM.femd:updateParameters(learningRate)
+		e1 = e0  + self.cfg.l2*0.5*params:norm()^2	--二阶范
+		local esub = self.LM.sub:backward(cos,e1)
+		local ecos = {}
+		ecos[1] = self.LM.cosine[1]:backward({rep3[1],rep3[2]},esub[1])
+		ecos[2] = self.LM.cosine[2]:backward({rep3[1],rep3[3]},esub[2])
+		local erep2 = {}
+		local emm = {}
+		local erep1 = {}
+		erep2[1] = self.LM.rep2[1]:backward(rep2[1],(ecos[1][1]+ecos[2][1])/2)
+		erep2[2] = self.LM.rep2[2]:backward(rep2[2],ecos[1][2])
+		erep2[3] = self.LM.rep2[3]:backward(rep2[3],ecos[2][2])
+		for i =1,3 do
+			emm[i] = self.LM.mm[i]:backward({wws[i],rep1[i]},erep2[i])
+			erep1[i] = self.LM.rep1[i]:backward(vecs[i],emm[i][2])
+			self.LM.emd[i]:backward(index[i],erep1[i])
+		end
+		local lr  = self.cfg.lr
+		self.LM.sub:updateParameters(lr)
+		self.LM.cosine[1]:updateParameters(lr)
+		self.LM.cosine[1]:zeroGradParameters()
+		self.LM.cosine[2]:updateParameters(lr)
+		self.LM.cosine[2]:zeroGradParameters()
+		for i =1 ,3 do
+			self.LM.rep1[i]:updateParameters(lr)
+			self.LM.rep1[i]:zeroGradParameters()
+			self.LM.rep2[i]:updateParameters(lr)
+			self.LM.rep2[i]:zeroGradParameters()
+			self.LM.emd[i]:updateParameters(lr)
+			self.LM.emd[i]:zeroGradParameters()
+			self.LM.mm[i]:updateParameters(lr)
+			self.LM.mm[i]:zeroGradParameters()
+		end
 	end
-	print('训练集的准确率：',right_sample/sample_count)
+	print('训练集的准确率：',right_sample/loop)
 end
 -------------------------
 
-function Trans4:test_one_pair(question_vec,answer_id) 	--给定一个问答pair，计算其相似度	
-	--传入的qst为已经计算好的向量，ans为问题的id
+function Trans4:test_one_pair(question_vec,answer_id) --传入的qst为已经计算好的向量，ans为问题的id
 	local answer_rep = self.dataSet:getAnswerVec(answer_id)	--获取答案的表达
-	--print('ans_rep',answer_id,answer_rep[1][1])
-	if self.cfg.gpu then
-		answer_rep = answer_rep:cuda()
-	end
-	local sim_sc = self.LM.qt:forward({question_vec,answer_rep})
+	local sim_sc = self.LM.cosine[1]:forward({question_vec,answer_rep})
 	return sim_sc[1]
 end
 
@@ -334,10 +253,10 @@ function Trans4:evaluate(name)	--评估训练好的模型的精度，top 1是正
 		local word_index = self:getIndex(answer)	--获取词下标
 		local ww = self:getWeight(word_index):clone()
 		if self.cfg.gpu then word_index = word_index:cuda() ww= ww:cuda() end
-		local answer_emd = self.LM.temd:forward(word_index):clone()
-		local answer_rep1 = self.LM.tas1:forward(answer_emd):clone()
-		local answer_rep2 = self.LM.tm:forward({ww,answer_rep1}):clone()
-		local answer_rep3 = self.LM.tas2:forward(answer_rep2):clone()
+		local answer_emd = self.LM.emd[2]:forward(word_index):clone()
+		local answer_rep1 = self.LM.rep1[2]:forward(answer_emd):clone()
+		local answer_rep2 = self.LM.mm[2]:forward({ww,answer_rep1}):clone()
+		local answer_rep3 = self.LM.rep2[2]:forward(answer_rep2):clone()
 		self.dataSet:saveAnswerVec(answer_pair[1],answer_rep3)
 		answer_pair = self.dataSet:getNextAnswer()
 	end	
@@ -360,10 +279,10 @@ function Trans4:evaluate(name)	--评估训练好的模型的精度，top 1是正
 		local qst_idx = self:getIndex(qst)
 		local qww = self:getWeight(qst_idx):clone()
 		if self.cfg.gpu then qst_idx = qst_idx:cuda() qww = qww:cuda() end
-		local qst_emd = self.LM.qemd:forward(qst_idx):clone()
-		local qst_vec1 = self.LM.qst1:forward(qst_emd):clone()
-		local qst_vec2 = self.LM.qm:forward({qww,qst_vec1}):clone()
-		local qst_vec = self.LM.qst2:forward(qst_vec2):clone()
+		local qst_emd = self.LM.emd[1]:forward(qst_idx):clone()
+		local qst_vec1 = self.LM.rep1[1]:forward(qst_emd):clone()
+		local qst_vec2 = self.LM.mm[1]:forward({qww,qst_vec1}):clone()
+		local qst_vec = self.LM.rep2[1]:forward(qst_vec2):clone()
 
 		local sc = {}	
 		local gold_sc ={}

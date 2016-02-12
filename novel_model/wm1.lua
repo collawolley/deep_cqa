@@ -52,7 +52,6 @@ function WM:getLM()	--获取语言模型
 	c1:add(nn.Identity())
 	reweight:add(nn.CMul(self.cfg.dim))
 
-	
 	for i = 1,3 do
 		lm.emd[i] = self.cfg.emd:clone()
 		lm.conv[i] = nn.SpatialConvolution(1,1000,self.cfg.dim,2,1,1,0,1)	--input需要是3维tensor
@@ -82,8 +81,6 @@ function WM:getLM()	--获取语言模型
 		lm.conv[i]:share(lm.conv[1],'weight','bias','gradWeight','gradBias')
 		lm.wm[i]:share(lm.wm[1],'weight','bias','gradWeight','gradBias')
 	end
-	--	self.LM.wm[1]['weight']:uniform(-0.01,0.01)
-	--self.LM.conv[1]['weight']:uniform(-0.01,0.01)
 	self.LM.sub:zeroGradParameters()
 	self.LM.cosine[1]:zeroGradParameters()
 	self.LM.cosine[2]:zeroGradParameters()
@@ -91,7 +88,11 @@ function WM:getLM()	--获取语言模型
 		self.LM.emd[i]:zeroGradParameters()
 		self.LM.rep[i]:zeroGradParameters()
 	end
-
+	local p,g
+	p,g = lm.wm[1]:parameters()
+	for i,v in pairs(p) do
+		v[1]= 1
+	end
 
 end
 ------------------------
@@ -124,7 +125,7 @@ function WM:train(negativeSize)
 		self.LM.conv[i]:share(self.LM.conv[1],'weight','bias','gradWeight','gradBias')
 		self.LM.wm[i]:share(self.LM.wm[1],'weight','bias','gradWeight','gradBias')
 	end
-		local criterion = nn.MarginCriterion(self.cfg.margin)
+	local criterion = nn.MarginCriterion(self.cfg.margin)
 	local gold = torch.Tensor({1})
 	if self.cfg.cuda then
 		criterion:cuda()
@@ -143,8 +144,16 @@ function WM:train(negativeSize)
 		if loop %1 ==0 then xlua.progress(self.dataSet.current_train,self.dataSet.train_set.size) end
 		sample = self.dataSet:getNextPair()
 		if sample == nil then break end	--数据集获取完毕
-		for i =1,3 do
+		for i = 1,3 do
 			index[i] = self:getIndex(sample[i]):clone()
+		end
+		if loop %2==0 then
+			index[2],index[3] = index[3],index[2]
+			gold[1]= -1
+		else
+			gold[1] =1
+		end
+		for i =1,3 do
 			if self.cfg.cuda then
 				index[i] = index[i]:cuda()
 			end
@@ -159,10 +168,9 @@ function WM:train(negativeSize)
 		if err <= 0 then
 			right_sample = right_sample + 1
 		end
-	--	print(cosine[1][1],cosine[2][1],pred[1],err,right_sample/loop,loop)
+
 		local e0 = criterion:backward(pred,gold)
 		e1 = e0  + self.cfg.l2*0.5*params:norm()^2	--二阶范
-
 		local esub= self.LM.sub:backward(cosine,e1)
 		local ecosine = {}
 		ecosine[1] = self.LM.cosine[1]:backward({rep[1],rep[2]},esub[1])
@@ -195,8 +203,7 @@ function WM:train(negativeSize)
 end
 -------------------------
 
-function WM:testOnePair(question_vec,answer_id) 	--给定一个问答pair，计算其相似度	
-	--传入的qst为已经计算好的向量，ans为问题的id
+function WM:testOnePair(question_vec,answer_id)	--传入的qst为已经计算好的向量，ans为问题的id
 	local answer_rep = self.dataSet:getAnswerVec(answer_id)	--获取答案的表达
 	local sim_sc = self.LM.cosine[1]:forward({question_vec,answer_rep})
 	return sim_sc[1]
