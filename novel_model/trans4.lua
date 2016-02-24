@@ -2,7 +2,7 @@
 	给词向量的表达加tf-idf
 	author:	liangjz
 	time:	2015-01-19
-	mdifiy: 2016-2-3
+	mdifiy: 2016-2-3 2016-2-24
 --]]
 --------------------
 local Trans = torch.class('Trans4')
@@ -24,16 +24,17 @@ function Trans: __init(useGPU)
 	self.LM = {}	--语言模型
 	self:getLM()	--生成语言模型
 	self.dataSet = InsSet()	--保险数据集，这里载入是为了获得测试集和答案
-	self.wc = torch.load(deep_cqa.config.word_count)
+	--self.wc = torch.load(deep_cqa.config.word_count) --tf-idf
+	self.wc = torch.load('bilstm.weight')	--bilstm.weight
 end	
 -----------------------
 
-function Trans4:getIndex(sent) --	获取一个句子的索引表达，作为整个模型的输入，可以直接应用到词向量层
+function Trans:getIndex(sent) --	获取一个句子的索引表达，作为整个模型的输入，可以直接应用到词向量层
 	return deep_cqa.read_one_sentence(sent,self.cfg.dict)
 end
 -----------------------
 
-function Trans4:getLM()	--获取语言模型
+function Trans:getLM()	--获取语言模型
 	self.LM ={}	--清空原始的模型
 	local lm = self.LM
 	lm.conv = {}
@@ -85,7 +86,7 @@ function Trans4:getLM()	--获取语言模型
 end
 ------------------------
 
-function Trans4:testLM()	--应用修改模型后测试模型是否按照预期执行
+function Trans:testLM()	--应用修改模型后测试模型是否按照预期执行
 	local criterion = nn.MarginCriterion(1)
 	local gold = torch.Tensor({1})
 	local index1 = self.getIndex('today is a good day'):clone()
@@ -93,7 +94,8 @@ function Trans4:testLM()	--应用修改模型后测试模型是否按照预期�
 	local index3 = self.getIndex('This class creates an output where the input is replicated'):clone()
 end
 --------------------------
-function Trans4:getWeight(indcs)	--获取对角矩阵，对应元素为权重
+--[[
+function Trans:getWeight(indcs)	--获取对角矩阵，对应元素为权重
 	local sgmd = nn.Tanh()
 	local size = indcs:size()[1]
 	local M = torch.Tensor(size,size):zero()
@@ -112,12 +114,27 @@ function Trans4:getWeight(indcs)	--获取对角矩阵，对应元素为权重
 		score =1+score
 		M[i][i]=  score
 	end
-	--print (M)
 	return M
-	
+end
+--]]
+function Trans:getWeight(indcs)	--获取对角矩阵，对应元素为权重
+	local size = indcs:size()[1]
+	local M = torch.Tensor(size,size):zero()
+	for i =1,size do
+		local id = indcs[i]
+		local w = self.cfg.dict:token(id)
+		local score = 0
+		if  self.wc[w]==nil then
+			score = 1.0
+		else
+			score = self.wc[w][1]/self.wc[w][2]
+		end
+		M[i][i]=  score
+	end
+	return M
 end
 
-function Trans4:train(negativeSize)
+function Trans:train(negativeSize)
 	self.dataSet:resetTrainset(negativeSize)	--设置训练集中每次选取负样本的数量
 	local modules = nn.Parallel()
 	for i =1,3 do
@@ -229,13 +246,13 @@ function Trans4:train(negativeSize)
 end
 -------------------------
 
-function Trans4:test_one_pair(question_vec,answer_id) --传入的qst为已经计算好的向量，ans为问题的id
+function Trans:test_one_pair(question_vec,answer_id) --传入的qst为已经计算好的向量，ans为问题的id
 	local answer_rep = self.dataSet:getAnswerVec(answer_id)	--获取答案的表达
 	local sim_sc = self.LM.cosine[1]:forward({question_vec,answer_rep})
 	return sim_sc[1]
 end
 
-function Trans4:evaluate(name)	--评估训练好的模型的精度，top 1是正确答案的比例
+function Trans:evaluate(name)	--评估训练好的模型的精度，top 1是正确答案的比例
 	local results = {}	--记录每个测试样本的结果
 	local test_size = 0
 	local loop = 0

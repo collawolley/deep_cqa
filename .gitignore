@@ -1,6 +1,7 @@
 /data/*
 /model/*
 /log/*
+run*
 # Compiled Lua sources
 luac.out
 
