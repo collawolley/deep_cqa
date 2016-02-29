@@ -334,7 +334,7 @@ function Sat:evaluate(name)
 	end
 
 	local results = torch.Tensor(results)
-	torch.save('bilstm.weight',self.w)
+	--torch.save('bilstm.weight',self.w)
 	print('Results:',torch.sum(results,1)/results:size()[1])
 end
 function Sat:refine(sent)
@@ -360,6 +360,7 @@ function Sat:refine(sent)
 			self.vlm.join3 = nn.JoinTable(2)
 			self.vlm.cos = nn.CosineDistance()
 		end
+			
 		if self.cfg.gpu then 
 			self.vlm.rep:cuda() 
 			self.vlm.resize:cuda() 

@@ -29,7 +29,7 @@ function Trans: __init(useGPU)
 end	
 -----------------------
 
-function Trans:getIndex(sent) --	获取一个句子的索引表达，作为整个模型的输入，可以直接应用到词向量层
+function Trans:getIndex(sent) --获取一个句子的索引表达，作为整个模型的输入，可以直接应用到词向量层
 	return deep_cqa.read_one_sentence(sent,self.cfg.dict)
 end
 -----------------------
@@ -154,7 +154,7 @@ function Trans:train(negativeSize)
 		gold = gold:cuda()
 	end
 
-	local sample =1	--占个坑
+	local sample = 1	--占个坑
 	local vecs={}	--存储词向量
 	local index ={}	--存储字符下标
 	local wws = {}	--word weights
