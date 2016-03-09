@@ -255,7 +255,7 @@ function Sat:evaluate(name)
 --[
 	while answer_pair~=nil do
 		loop = loop+1
-		xlua.progress(loop,self.dataSet.answer_set.size)
+--		xlua.progress(loop,self.dataSet.answer_set.size)
 		local answer = answer_pair[2]	--获取问题内容
 --[
 		local word_index = self:getIndex(answer)	--获取词下标
@@ -264,7 +264,6 @@ function Sat:evaluate(name)
 		local answer_rep = self.LM.rep[2]:forward(answer_emd):clone()
 		self.LM.bilstm[2]:forget()
 --]
-		--local answer_rep = self:refine(answer):clone()
 		self.dataSet:saveAnswerVec(answer_pair[1],answer_rep)
 		answer_pair = self.dataSet:getNextAnswer()
 	end	
@@ -280,8 +279,8 @@ function Sat:evaluate(name)
 	loop = 0
 	while test_pair~=nil do
 		loop = loop+1
-		xlua.progress(loop,test_size)
-
+--		xlua.progress(loop,test_size)
+		local output={}
 		local gold = test_pair[1]	--正确答案的集合
 		local qst = test_pair[2]	--问题
 		local candidates = test_pair[3] --候选的答案
@@ -291,24 +290,30 @@ function Sat:evaluate(name)
 		local qst_emd = self.LM.emd[1]:forward(qst_idx):clone()
 		local qst_vec = self.LM.rep[1]:forward(qst_emd):clone()
 		self.LM.bilstm[1]:forget()
---]
---		local qst_vec = self:refine(qst):clone()
+--]		
+		output['qst'] = qst
 		local sc = {}	
 		local gold_sc ={}
 		local gold_rank = {}
-		
+		output['ta'] = {}
 		for k,c in pairs(gold) do 
 			local score = self:testOnePair(qst_vec,c)	--标准答案的得分,传入内容为问题的表达和答案的编号
+			table.insert(output['ta'],self.dataSet:getAnswer(c))
 			gold_sc[k] = score
 			gold_rank[k] = 1	--初始化排名
 		end
-
+		output['fa']={}
 		for k,c in pairs(candidates) do 
 			local score = self:testOnePair(qst_vec,c)
+			local mark=false;
 			for m,n in pairs(gold_sc) do
 				if score > n then
 					gold_rank[m] = gold_rank[m]+1
+					mark = true;
 				end
+			end
+			if mark then
+				table.insert(output['fa'],self.dataSet:getAnswer(c))
 			end
 		end
 		
@@ -317,6 +322,8 @@ function Sat:evaluate(name)
 		for k,c in pairs(gold_rank) do
 			if c==1 then 
 				mark = 1.0
+			else
+				print(output)
 			end
 			mrr = mrr + 1.0/c
 		end
@@ -332,199 +339,4 @@ function Sat:evaluate(name)
 
 	local results = torch.Tensor(results)
 	print('Results:',torch.sum(results,1)/results:size()[1])
-end
-function Sat:refine(sent)
-	if self.vlm == nil then	--创建重构语言模型
-		self.vlm = {}
-		self.vlm.rep = nn.Sequential()
-		self.vlm.rep:add(self.LM.emd[1])	--获取词向量
-		self.vlm.rep:add(nn.SplitTable(1))	--分割成为table
-		self.vlm.rep:add(self.LM.bilstm[1])	--获取双向lstm的表达
-		self.vlm.resize = nn.Sequential()	--分离bilstm的表达
-		self.vlm.resize:add(nn.JoinTable(1))	
-		self.vlm.resize:add(nn.View(-1,2,self.cfg.mem))
-		self.vlm.resize:add(nn.SplitTable(2))
-		self.vlm.diff ={}
-		self.vlm.join1 = {}
-		self.vlm.join2 = {}
-		self.vlm.diffW = {}
-		for i = 1,2 do
-			self.vlm.diff[i] =  nn.MM(false,false)
-			self.vlm.diffW[i] = nil
-			self.vlm.join1[i] = nn.JoinTable(1)
-			self.vlm.join2 = nn.JoinTable(2)
-			self.vlm.join3 = nn.JoinTable(2)
-			self.vlm.cos = nn.CosineDistance()
-		end
-		if self.cfg.gpu then 
-			self.vlm.rep:cuda() 
-			self.vlm.resize:cuda() 
-			self.vlm.join2:cuda()
-			self.vlm.join3:cuda()
-			self.vlm.cos:cuda()
-			for i = 1,2 do 
-				self.vlm.diff[i]:cuda()
-				self.vlm.join1[i]:cuda()
-			end
-		end
-	end	
-	local idx =  self:getIndex(sent):clone()
-	self.LM.bilstm[1]:forget()
-	local size = idx:size()[1]
-	self.vlm.diffW[1] =  torch.Tensor(size-1,size):zero()
-	self.vlm.diffW[2] =  torch.Tensor(size-1,size):zero()
-	for i = 1,size-1 do --构造
-		self.vlm.diffW[1][i][i] = -1
-		self.vlm.diffW[1][i][i+1] = 1	
-		self.vlm.diffW[2][i][i] = 1
-		self.vlm.diffW[2][i][i+1] = -1
-	end
-	if self.cfg.gpu then 
-		self.vlm.diffW[1] = self.vlm.diffW[1]:cuda() 
-		self.vlm.diffW[2] = self.vlm.diffW[2]:cuda() 
-		idx = idx:cuda()
-	end	
-	local rep1 = self.vlm.rep:forward(idx)
-	local rep2 = self.vlm.resize:forward(rep1)
-
-	local sub= {}
-	for  i = 1,2 do
-		sub[i] = self.vlm.diff[i]:forward({self.vlm.diffW[i],rep2[i]})
-	end
-	local j1 = {}
-	local size=  idx:size()[1]
-	j1[1] = self.vlm.join1[1]:forward({sub[2][1]:resize(1,self.cfg.mem),sub[1]})
-	j1[2] = self.vlm.join1[2]:forward({sub[2],sub[1][idx:size()[1]-1]:resize(1,self.cfg.mem)})
-	local j2 = self.vlm.join2:forward(j1)	--各个状态之间的差
-	local weight = torch.Tensor(size):zero()
-	for i =1, size do	
-		weight[i] = j2[i]:norm()
-	end
-	local sum = weight:sum()
-	if self.cfg.gpu then 
-		weight = weight:cuda()
-	end	
-	--local result = torch.Tensor(1,self.cfg.mem*2):zero():cuda()
-	for i =1,size do 
-		weight[i] = weight[i]/sum*size
-	end
-	for i =1,size do
-		rep1[i] = rep1[i]*weight[i]
---		result = result + rep1[i]
-	end	
-	local result = self.LM.pip:forward(rep1):cuda()
-	
-	--print(result)
-	--print(weight)
-	return result
-end
-
-function Sat:demo(sent)
-	vlm = {}
-	vlm.rep = nn.Sequential()
-	vlm.rep:add(self.LM.emd[1])
-	vlm.rep:add(nn.SplitTable(1))
-	vlm.rep:add(self.LM.bilstm[1])
-	vlm.rep:add(nn.JoinTable(1))
-	vlm.rep:add(nn.View(-1,2,self.cfg.mem))
-	vlm.rep:add(nn.SplitTable(2))
-	vlm.diff ={}
-	vlm.join1 = {}
-	vlm.join2 = {}
-	vlm.diffW = {}
-	for i = 1,2 do
-		vlm.diff[i] =  nn.MM(false,false)
-		vlm.diffW[i] = nil
-		vlm.join1[i] = nn.JoinTable(1)
-		vlm.join2 = nn.JoinTable(2)
-		vlm.join3 = nn.JoinTable(2)
-		vlm.cos = nn.CosineDistance()
-	end
-	if self.cfg.gpu then 
-		vlm.rep:cuda() 
-		vlm.join2:cuda()
-		vlm.join3:cuda()
-		vlm.cos:cuda()
-		for i = 1,2 do 
-			vlm.diff[i]:cuda()
-			vlm.join1[i]:cuda()
-		end
-	end
-	
---	sent= self.dataSet:getNextAnswer(true)	--从头开始计算answer的向量
-	local sent= self.dataSet:getNextDev(true)
-	while sent~=nil do
-	local sample = {}
---	sample[1] = sent[2]
---	sample[2] =self.dataSet:getAnswer(sent[1][1])
-	sample[1] = 'what be car insurance base on'
-	sample[2] = 'what be health insurance base on'
-	sample[3] = 'what be house insurance base on'
-	for loop = 1,3 do
-		local idx =  self:getIndex(sample[loop]):clone()
-		self.LM.bilstm[1]:forget()
-		local rep = vlm.rep:forward(idx)
-		vlm.diffW[1] =  torch.Tensor(idx:size()[1]-1,idx:size()[1]):zero()
-		vlm.diffW[2] =  torch.Tensor(idx:size()[1]-1,idx:size()[1]):zero()
-
-		for i = 1,idx:size()[1]-1 do --构造
-			vlm.diffW[1][i][i] = -1
-			vlm.diffW[1][i][i+1] = 1	
-			vlm.diffW[2][i][i] = 1
-			vlm.diffW[2][i][i+1] = -1
-		end
-		if self.cfg.gpu then 
-			idx = idx:cuda() 
-			vlm.diffW[1] = vlm.diffW[1]:cuda() 
-			vlm.diffW[2] = vlm.diffW[2]:cuda() 
-		end
-		local sub= {}
-		for  i = 1,2 do
-			sub[i] = vlm.diff[i]:forward({vlm.diffW[i],rep[i]})
-		end
-		local j1 = {}
-		local size=  idx:size()[1]
-		j1[1] = vlm.join1[1]:forward({sub[2][1]:resize(1,self.cfg.mem),sub[1]})
-		j1[2] = vlm.join1[2]:forward({sub[2],sub[1][idx:size()[1]-1]:resize(1,self.cfg.mem)})
-		
-		local j2 = vlm.join2:forward(j1)
---		ht = vlm.join3:forward({rep[1][size]:resize(1,self.cfg.mem),rep[2][1]:resize(1,self.cfg.mem)})
-
-		local pp =''
-		local ps = ''
-		local rank = {}
-		local map  = {}
-		local key = {}
-		for  i =1,idx:size()[1] do
-			local w = self.cfg.dict:token(idx[i])
-			map[j2[i]:norm()] = i
-			rank[i] = w
-			table.insert(key,j2[i]:norm())
-		end
-		table.sort(key)
-		for i=1,idx:size()[1] do
-			local word = self.cfg.dict:token(idx[i])
-			local score1 = string.format('%.2f',j2[i]:norm())
---			local score2 = string.format('%.2f',vlm.cos:forward({ht[1],j2[i]})[1])
-			local tmp  = ' ' .. word ..'-'.. score1-- .. ' ' ..score2 
-			pp = pp .. tmp
-		end
-		for i = #key,1,-1 do
-			local score = key[i]
-			local r = map[score]
-			local w = rank[r]
-			local s = string.format('%.2f',score)
-			ps = ps.. ' ' .. w ..'-' .. s 
-		end
-			
-		print(pp)
-		print('\n')
-		print(ps)
-		print('\n')
-	end
-	break
-	sent= self.dataSet:getNextDev(false)
-	print('##############################################\n')
---	sent= self.dataSet:getNextAnswer(false)	--从头开始计算answer的向量
-	end
 end

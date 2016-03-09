@@ -3,35 +3,35 @@
 	liangjz 2015-1-4
 --]]
 require('..')
-deep_cqa.ins_meth.load_binary()	
+dataSet = InsSet(1)
 function test(name)
 	cosim = CoSim()
-	local test_set = deep_cqa.insurance[name]
-	local answer_set = deep_cqa.insurance['answer']
-	if(test_set == nil) then print('测试集载入为空！') return end
-	
 	local results = {}
 	print('test process:')
-	for i,v in pairs(test_set) do
-		xlua.progress(i,1000)
+	local test_pair = dataSet:getNextDev(true)
+	loop = 0
+	while test_pair~=nil do
+		loop = loop + 1
+		xlua.progress(loop,1000)
 
-		local golden = v[1]	--正确答案的集合
-		local qst = v[2]	--问题
-		local candidates = v[3] --候选的答案
+		local golden = test_pair[1]	--正确答案的集合
+		local qst = test_pair[2]	--问题
+		local candidates = test_pair[3] --候选的答案
 		
 		local sc = {}	
 		local golden_sc ={}
 		local golden_rank = {}
-		
+		print(qst)
 		for k,c in pairs(golden) do 
 			c =tostring(tonumber(c))
-			local score = cosim:get_score(qst,answer_set[c])	--标准答案的得分
+			local score = cosim:get_score(qst,dataSet:getAnswer(c))	--标准答案的得分
 			golden_sc[k] = score
 			golden_rank[k] = 1	--初始化排名
 		end
+		print('other answers:')
 		for k,c in pairs(candidates) do 
 			c =tostring(tonumber(c))
-			local score = cosim:get_score(qst,answer_set[c])
+			local score = cosim:get_score(qst,dataSet:getAnswer(c))
 			for m,n in pairs(golden_sc) do
 				if score > n then
 					golden_rank[m] = golden_rank[m]+1
@@ -46,9 +46,9 @@ function test(name)
 			end
 			mrr = mrr + 1.0/c
 		end
-		results[i] = {mrr,mark}
-		if i%50 ==0 then collectgarbage() end
-	--	if i>99 then break end
+		results[loop] = {mrr,mark}
+		if loop%50 ==0 then collectgarbage() end
+		test_pair = dataSet:getNextDev()
 	end
 	local results = torch.Tensor(results)
 	print(torch.sum(results,1)/results:size()[1])

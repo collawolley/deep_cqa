@@ -5,49 +5,34 @@
 	共现矩阵（从训练集中提取得来）
 	idf统计结果
 --]]
+require('math')
 local CoSim = torch.class('CoSim')
 function CoSim:__init()		
 	-- 初始化，载入截止词和共现矩阵
-	self.sw = torch.load(deep_cqa.config.stop_words)
-	self.wc = torch.load(deep_cqa.config.word_count)
-	self.co_matrix = torch.load(deep_cqa.config.co_matrix,'binary')
+	self.co_matrix = torch.load('insurance_pmi.bin')
 end
 -----------------------
 function CoSim:get_score(question, answer)
 	--简单计算答案相对问题的相似度得分
 	local qst = string.gsub(question,'\r',''):split(' ')
 	local ans = string.gsub(answer,'\r',''):split(' ')
-	local score = {}
-	for i,aw in pairs(ans) do
-		score[i] = 0
-		if self.sw[aw]== nil then
-			for j,qw in pairs(qst) do
-				if self.sw[qw] == nil then
-					local t = self.co_matrix[qw]
-					if t ~= nil then 
-						t = t[aw]				
-					end
-					if t == nil then
-						t =0
-					else
-						t=t*(self.wc[aw][1]*self.wc[qw][1])
-						--t=t/(self.wc[aw][1])
-					end
-					score[i] = score[i]+t				
-				end
+	local score = 1
+	local s2 ={}
+	for i,qw in pairs(qst) do
+		local s1 =0;
+		for j,aw in pairs(ans) do
+			if self.co_matrix[qw]~=nil and self.co_matrix[qw][aw]~=nil then
+				s1 = s1 + math.log10(self.co_matrix[qw][aw])
+--				print(qw,aw,math.log10(self.co_matrix[qw][aw]))
+
+			else
+				s1 = s1 * 1
 			end
 		end
+		score = score + s1/#ans
+		s2[i]= s1/#ans
 	end
-	local value =0.0 -- 返回给调用代码的相似度值
-	for i,v in pairs(score) do 
-		value = value + v
-	end
-	value = value/#score/#qst
-	return value
-	--return 0
+	print(s2)
+--	print(score)		
+	return score
 end
---[[
-tmp = CoSim()
-sc = tmp:get_score('today is a good day','tomorrw is a good day too')
-print(sc)
---]]

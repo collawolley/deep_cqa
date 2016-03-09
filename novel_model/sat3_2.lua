@@ -213,7 +213,7 @@ function Sat:train(negativeSize)
 			self.LM.sub:zeroGradParameters()
 			self.LM.cosine[1]:zeroGradParameters()
 			self.LM.cosine[2]:zeroGradParameters()
-	
+			
 			for i = 1,3 do
 				self.LM.rep[i]:updateParameters(lr)
 				self.LM.rep[i]:zeroGradParameters()
@@ -238,6 +238,21 @@ function Sat:testOnePair(question_vec,answer_id) 	--给定一个问答pair，计
 	local sim_sc = self.LM.cosine[1]:forward({question_vec,answer_rep})
 	return sim_sc[1]
 end
+function Sat:testSimAnswers(taid,faid) 	--给定一个待评判的答案，和相似问题的对应答案，计算综合相似性
+	--print(taid)
+	local fa_rep = self.dataSet:getAnswerVec(faid)	--获取答案的表达
+	local score = 0.0
+	for i,v in pairs(taid) do
+		local ta_rep = self.dataSet:getAnswerVec(v)
+		if self.cfg.gpu then
+			fa_rep = fa_rep:cuda()
+			ta_rep = ta_rep:cuda()
+		end
+		score =score+ self.LM.cosine[1]:forward({fa_rep,ta_rep})[1]
+	end
+	score = score/table.getn(taid)
+	return score
+end
 
 
 function Sat:evaluate(name)
@@ -253,9 +268,10 @@ function Sat:evaluate(name)
 	else
 		test_size = self.dataSet.test_set.size 
 	end
+--[
 	print('\nCalculating answers')
 	local answer_pair =self.dataSet:getNextAnswer(true)	--从头开始计算answer的向量
---[
+
 	while answer_pair~=nil do
 		loop = loop+1
 		xlua.progress(loop,self.dataSet.answer_set.size)
@@ -272,6 +288,9 @@ function Sat:evaluate(name)
 		answer_pair = self.dataSet:getNextAnswer()
 	end	
 --]
+	torch.save('answer_avgpool_vec.bin',self.dataSet.answer_vecs)
+	--self.dataSet.anwer_vecs= torch.load('answer_vec.bin')
+	dev_sim = torch.load('data/insurance_qa/dev_sim.bin')
 	collectgarbage() 
 	print('Test process:')
 	local test_pair =nil
@@ -301,13 +320,15 @@ function Sat:evaluate(name)
 		local gold_rank = {}
 		
 		for k,c in pairs(gold) do 
-			local score = self:testOnePair(qst_vec,c)	--标准答案的得分,传入内容为问题的表达和答案的编号
+			--local score = self:testOnePair(qst_vec,c)	--标准答案的得分,传入内容为问题的表达和答案的编号
+			local score = self:testSimAnswers(dev_sim[tonumber(c)],c)
 			gold_sc[k] = score
 			gold_rank[k] = 1	--初始化排名
 		end
 
 		for k,c in pairs(candidates) do 
-			local score = self:testOnePair(qst_vec,c)
+			--local score = self:testOnePair(qst_vec,c)
+			local score = self:testSimAnswers(dev_sim[tonumber(gold[1])],c)
 			for m,n in pairs(gold_sc) do
 				if score > n then
 					gold_rank[m] = gold_rank[m]+1
@@ -352,6 +373,9 @@ function Sat:refine(sent)
 		self.vlm.join1 = {}
 		self.vlm.join2 = {}
 		self.vlm.diffW = {}
+		self.vlm.resize2 = nn.Sequential()	--将表达2的形式换回表达1
+		self.vlm.resize2:add(nn.JoinTable(2))
+		self.vlm.resize2:add(nn.SplitTable(1))
 		for i = 1,2 do
 			self.vlm.diff[i] =  nn.MM(false,false)
 			self.vlm.diffW[i] = nil
@@ -367,6 +391,7 @@ function Sat:refine(sent)
 			self.vlm.join2:cuda()
 			self.vlm.join3:cuda()
 			self.vlm.cos:cuda()
+			self.vlm.resize2:cuda()
 			for i = 1,2 do 
 				self.vlm.diff[i]:cuda()
 				self.vlm.join1[i]:cuda()
@@ -390,7 +415,9 @@ function Sat:refine(sent)
 		idx = idx:cuda()
 	end	
 	local rep1 = self.vlm.rep:forward(idx)
+--	print('rep1:size',rep1[1]:clone():resize(10,20))
 	local rep2 = self.vlm.resize:forward(rep1)
+--	print('rep2:size',rep2)
 
 	local sub= {}
 	for  i = 1,2 do
@@ -423,12 +450,29 @@ function Sat:refine(sent)
 		self.w[token][2] = self.w[token][2] + 1
 	end
 	for i =1,size do
-		rep1[i] = rep1[i]*weight[i]
+--		print('A',rep2[1][i][1],weight[i])
+		rep2[1][i] = rep2[1][i]*weight[i]
+--		print('B',rep2[1][i][1],weight[i])
+--		print('C',rep2[2][size+1-i][1],weight[i])
+		rep2[2][size+1-i] = rep2[2][size+1-i]*weight[i]
+--		print('D',rep2[2][size+1-i][1],weight[i])
+
 --		result = result + rep1[i]
 	end	
-	local result = self.LM.pip:forward(rep1):cuda()
-	
-	--print(result)
+--	print(weight)
+	rep1 = self.vlm.resize2:forward(rep2)
+--	print('rep1-done',rep1[1]:clone():resize(10,20))
+	local result = torch.Tensor(self.cfg.mem*2):zero()
+	if self.cfg.gpu then
+		result = result:cuda()
+	end
+	local rep_size =1
+	for i,v in pairs(rep1) do
+		result = result+v
+		rep_size  = i
+	end
+	result = result/rep_size
+--	local result = self.LM.pip:forward(rep1):cuda()
 	--print(weight)
 	--print(self.w)
 	return result
