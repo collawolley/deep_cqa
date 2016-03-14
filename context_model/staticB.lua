@@ -68,10 +68,12 @@ function get_pmi()
 		for j,x in pairs(v) do
 			pq = qwc[i]/all_count
 			pa = awc[j]/all_count
-		--	print('before',i,j,x,pq,pa,all_count)
-			x = x/all_count
-			x= x/pa/pq
-		--	print(x)
+			x = x*1.0/all_count
+			if i=='insurance' then
+				--print(pq,pa,x)
+			end
+--			print(x,pa,pq,x/(pa*pq))
+			cm[i][j]= x/(pa*pq)--/all_count*1000
 		end
 	end
 	torch.save('insurance_pmi.bin',cm)

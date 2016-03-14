@@ -21,20 +21,22 @@ function test(name)
 		local sc = {}	
 		local golden_sc ={}
 		local golden_rank = {}
-		print(qst)
+	--	print(qst)
 		for k,c in pairs(golden) do 
 			c =tostring(tonumber(c))
-			local score = cosim:get_score(qst,dataSet:getAnswer(c))	--标准答案的得分
+			local score = cosim:get_score(qst,dataSet:getAnswer(c),true)	--标准答案的得分
 			golden_sc[k] = score
 			golden_rank[k] = 1	--初始化排名
 		end
-		print('other answers:')
+	--	print('other answers:')
 		for k,c in pairs(candidates) do 
 			c =tostring(tonumber(c))
 			local score = cosim:get_score(qst,dataSet:getAnswer(c))
 			for m,n in pairs(golden_sc) do
 				if score > n then
 					golden_rank[m] = golden_rank[m]+1
+	--				print('Over')
+					cosim:get_score(qst,dataSet:getAnswer(c),true)
 				end
 			end
 		end
