@@ -19,7 +19,7 @@ config.parent_path = lfs.currentdir() .. '/'
 config.emd_vec = config.parent_path .. 'data/glove/glove.840B.300d.th'
 config.emd_dict = config.parent_path .. 'data/glove/glove.840B.vocab'
 config.emd_dim = 300
---]
+--]]
 -------
 --[[
 config.emd_vec = config.parent_path .. 'data/word2vec/Google_300.vec'
@@ -88,6 +88,8 @@ include('util/vocab.lua')
 include('util/emd.lua')
 include('util/read_data.lua')
 include('util/InsSet.lua')
+--include('util/GameSet.lua')
+include('util/Yahoo.lua')
 include('util/CocoSet.lua')
 include('util/CocoSet2.lua')
 include('simple_model/avg_emd.lua')
@@ -108,6 +110,8 @@ include('novel_model/sat4.lua')
 include('novel_model/wm1.lua')
 include('novel_model/coco_cnn.lua')
 include('novel_model/coco2_cnn.lua')
+
+include('qieyi/QY_A.lua')
 
 
 --deep_cqa.ins_meth.load_txt_dataset()

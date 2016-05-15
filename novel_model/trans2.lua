@@ -15,7 +15,7 @@ function Trans2: __init(useGPU)
 		margin	= 0.009,
 		l2	= 0.0001,	--L2范式的约束
 		lr	= 0.01	--学习率
-	}	
+	}
 	self.cfg.dict, self.cfg.vecs = deep_cqa.get_sub_embedding()
 	self.cfg.emd = nn.LookupTable(self.cfg.vecs:size(1),self.cfg.dim)
 	self.cfg.emd.weight:copy(self.cfg.vecs)
@@ -137,7 +137,7 @@ function Trans2:train(negativeSize)
 	local right_sample = 0
 	while sample ~= nil do	--数据集跑完？	
 		loop = loop + 1
-		if loop %100 ==0 then xlua.progress(self.dataSet.current_train,self.dataSet.train_set.size) end
+		if loop %1 ==0 then xlua.progress(self.dataSet.current_train,self.dataSet.train_set.size) end
 		sample = self.dataSet:getNextPair()
 		if sample == nil then break end	--数据集获取完毕
 --[
@@ -152,6 +152,7 @@ function Trans2:train(negativeSize)
 --]
 	
 		for i =1,3 do
+			--print(sample[i])
 			index[i] = self:getIndex(sample[i]):clone()
 			if self.cfg.gpu then
 				index[i] = index[i]:cuda()
@@ -295,5 +296,8 @@ function Trans2:evaluate(name)	--评估训练好的模型的精度，top 1是正
 	end
 
 	local results = torch.Tensor(results)
-	print('Results:',torch.sum(results,1)/results:size()[1])
+	precs=torch.sum(results,1)/results:size()[1]
+	print('Results:',precs[1][1],precs[1][2])
+	return precs
+	
 end

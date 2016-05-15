@@ -132,7 +132,8 @@ function deep_cqa.ins_meth.save_binary()
 end
 ----------
 function deep_cqa.ins_meth.load_binary()
-	local ip = deep_cqa.config.insurance.binary
+	--local ip = deep_cqa.config.insurance.binary
+	local ip = 'data/insurance_qa/bing/bing_insurance.bin'
 	deep_cqa.insurance = torch.load(ip)
 end
 ----------------------------------------
