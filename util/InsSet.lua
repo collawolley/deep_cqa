@@ -10,15 +10,10 @@ local InsSet = torch.class('InsSet')	--保险语料库的读取warper
 function InsSet:__init(negative_size)
 	deep_cqa.ins_meth.load_binary()	--从现有有的二进制文件中读取数据集
 	self.answer_set = deep_cqa.insurance['answer']
-	--print(self.answer_set.size)
 	self.train_set = deep_cqa.insurance['train']
-	--print(self.train_set.size,self.train_set[1])
 	self.dev_set = deep_cqa.insurance['dev']
-	--print(self.dev_set.size,self.dev_set[1])
 	self.test1_set = deep_cqa.insurance['test1']
-	--print(self.test1_set.size,self.test1_set[1])
 	self.test2_set = deep_cqa.insurance['test2']
-	--print(self.test2_set.size,self.test2_set[1])
 	self.test_set =self.test1_set	--默认的测试集为test1集合,这个可以以后再说
 
 	self.indices = torch.randperm(self.train_set.size)	--对训练样本进行乱序处理
@@ -34,9 +29,10 @@ function InsSet:__init(negative_size)
 end
 function InsSet:getNextPair()	--生成下一对问题-正样本-负样本对
 	if self.current_train > self.train_set.size then return nil end	--数据集已经遍历完毕
-	local qst = self.train_set[self.current_train][1]	--一个问题
-	local true_id = self.train_set[self.current_train][2][self.current_answer]	--一个正确答案
-	local false_id = deep_cqa.ins_meth.random_negative_id(self.train_set[self.current_train][2],self.answer_set.size,deep_cqa.config.random_seed)
+	--local qst = self.train_set[self.current_train][1]	--一个问题
+	local qst = self.train_set[self.indices[self.current_train]][1]	--一个问题
+	local true_id = self.train_set[self.indices[self.current_train]][2][self.current_answer]	--一个正确答案
+	local false_id = deep_cqa.ins_meth.random_negative_id(self.train_set[self.indices[self.current_train]][2],self.answer_set.size,deep_cqa.config.random_seed)
 	deep_cqa.config.random_seed = (deep_cqa.config.random_seed +5)%50000000	--随机种子
 	true_id  = tostring(tonumber(true_id))
 	false_id  = tostring(tonumber(false_id))
@@ -47,7 +43,7 @@ function InsSet:getNextPair()	--生成下一对问题-正样本-负样本对
 		self.current_negative = 1
 		self.current_answer = self.current_answer + 1
 	end
-	if self.current_answer > #self.train_set[self.current_train][2] then	--当前问题的正确回答已经遍历完毕
+	if self.current_answer > #self.train_set[self.indices[self.current_train]][2] then	--当前问题的正确回答已经遍历完毕
 		self.current_answer = 1
 		self.current_train = self.current_train + 1
 	end

@@ -76,6 +76,10 @@ config.random_seed =134
 config.stop_words = 'data/context/stop_words.tab'
 config.co_matrix = 'data/context/co_matrix.tab'
 config.word_count = 'data/context/word_count.tab'
+-------------
+--wikiQA的相关配置，此版本所有的问题都有对应的正确回答
+config.wiki={}
+config.wiki.corp=config.parent_path .. 'data/wiki_qa/WikiQA.bin'
 -------------------------
 deep_cqa.config = config
 deep_cqa.insurance = {}
@@ -88,10 +92,10 @@ include('util/vocab.lua')
 include('util/emd.lua')
 include('util/read_data.lua')
 include('util/InsSet.lua')
---include('util/GameSet.lua')
 include('util/Yahoo.lua')
 include('util/CocoSet.lua')
 include('util/CocoSet2.lua')
+include('util/WikiQA.lua')
 include('simple_model/avg_emd.lua')
 include('context_model/co_sim.lua')
 include('context_model/contextA.lua')
